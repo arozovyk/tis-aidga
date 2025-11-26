@@ -3,7 +3,7 @@
 from ..state import DriverState
 from ..models.openai_adapter import OpenAIAdapter
 from ..prompts.templates import build_refiner_prompt
-from ..workflow_logger import get_logger
+from ..workflow_logger import get_logger, get_structured_logger
 
 
 def refiner_node(state: DriverState, model_adapter: OpenAIAdapter) -> DriverState:
@@ -37,9 +37,25 @@ def refiner_node(state: DriverState, model_adapter: OpenAIAdapter) -> DriverStat
     # Extract code
     refined_code = model_adapter.extract_code(response)
 
-    # Log refined code
+    # Log refined code (workflow logger)
     if logger:
         logger.log_generated_code(refined_code, iteration)
+
+    # Log to structured logger (separate files)
+    structured_logger = get_structured_logger()
+    if structured_logger:
+        structured_logger.log_llm_query(
+            prompt=prompt,
+            response=response,
+            step="refiner",
+            iteration=iteration,
+            model=model_adapter.model,
+        )
+        structured_logger.log_driver_code(
+            code=refined_code,
+            step="refiner",
+            iteration=iteration,
+        )
 
     return {
         **state,

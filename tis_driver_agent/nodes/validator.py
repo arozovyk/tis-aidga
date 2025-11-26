@@ -6,7 +6,7 @@ import os
 from ..state import DriverState
 from ..cc import cc_compile
 from ..tis import TISRunnerBase
-from ..workflow_logger import get_logger
+from ..workflow_logger import get_logger, get_structured_logger
 
 
 def validator_node(
@@ -67,6 +67,22 @@ def validator_node(
                     cc_success=False,
                     tis_success=False,
                     error_summary=f"CC failed with {len(cc_result.errors)} errors (TIS not attempted)",
+                )
+            # Log to structured logger (CC failed, TIS not attempted)
+            structured_logger = get_structured_logger()
+            if structured_logger:
+                structured_logger.log_validation(
+                    iteration=iteration,
+                    cc_result={
+                        "success": cc_result.success,
+                        "command": cc_result.command,
+                        "exit_code": cc_result.exit_code,
+                        "errors": cc_result.errors,
+                        "stdout": cc_result.stdout,
+                        "stderr": cc_result.stderr,
+                    },
+                    tis_result=None,
+                    is_valid=False,
                 )
             return {
                 **state,
@@ -140,6 +156,30 @@ def validator_node(
                 cc_success=cc_result.success,
                 tis_success=tis_result.success,
                 error_summary=error_summary,
+            )
+
+        # Log to structured logger (separate files)
+        structured_logger = get_structured_logger()
+        if structured_logger:
+            structured_logger.log_validation(
+                iteration=iteration,
+                cc_result={
+                    "success": cc_result.success,
+                    "command": cc_result.command,
+                    "exit_code": cc_result.exit_code,
+                    "errors": cc_result.errors,
+                    "stdout": cc_result.stdout,
+                    "stderr": cc_result.stderr,
+                },
+                tis_result={
+                    "success": tis_result.success,
+                    "command": tis_result.command,
+                    "exit_code": tis_result.exit_code,
+                    "errors": tis_result.errors,
+                    "stdout": tis_result.stdout,
+                    "stderr": tis_result.stderr,
+                },
+                is_valid=is_valid,
             )
 
         return {

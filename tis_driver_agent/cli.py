@@ -17,7 +17,13 @@ from .utils.context_detector import (
     parse_includes,
     extract_function_signature,
 )
-from .workflow_logger import WorkflowLogger, set_logger
+from .workflow_logger import (
+    WorkflowLogger,
+    StructuredLogger,
+    set_logger,
+    set_structured_logger,
+    get_structured_logger,
+)
 
 # Load environment variables from .env file
 load_dotenv()
@@ -196,6 +202,14 @@ def cmd_gen(args):
         if args.verbose:
             print(f"Logging to: {args.log}")
 
+    # Initialize structured logger if --with-logs is specified
+    structured_logger = None
+    if args.with_logs:
+        structured_logger = StructuredLogger(args.with_logs)
+        set_structured_logger(structured_logger)
+        if args.verbose:
+            print(f"Structured logs directory: {args.with_logs}")
+
     if args.verbose:
         print(f"Generating driver for: {args.function}")
         print(f"Project: {args.project}")
@@ -223,23 +237,46 @@ def cmd_gen(args):
             print(f"Error: Could not read source file: {file_info.path}")
             sys.exit(1)
 
-        # Build context: source file + headers
+        # Build context based on --context mode
         context_files = [{"name": file_info.name, "content": source_content}]
 
-        # Parse includes from source and fetch headers
-        includes = parse_includes(source_content)
-        if args.verbose:
-            print(f"Found {len(includes)} includes in source")
+        if args.context == "none":
+            # No headers - source file only
+            if args.verbose:
+                print("Context mode: none (source file only)")
 
-        for inc in includes:
-            # Try to find and read header
-            header_path = tis_runner.find_header_files(file_info.includes, inc)
+        elif args.context == "matching":
+            # Matching header only (foo.c -> foo.h)
+            base_name = os.path.splitext(file_info.name)[0]
+            matching_header = f"{base_name}.h"
+
+            if args.verbose:
+                print(f"Context mode: matching (looking for {matching_header})")
+
+            header_path = tis_runner.find_header_files(file_info.includes, matching_header)
             if header_path:
                 header_content = tis_runner.read_remote_file(header_path)
                 if header_content:
-                    context_files.append({"name": inc, "content": header_content})
+                    context_files.append({"name": matching_header, "content": header_content})
                     if args.verbose:
-                        print(f"  Added header: {inc}")
+                        print(f"  Added matching header: {matching_header}")
+            elif args.verbose:
+                print(f"  No matching header found")
+
+        elif args.context == "full":
+            # Full context: fetch ALL headers from includes
+            includes = parse_includes(source_content)
+            if args.verbose:
+                print(f"Context mode: full ({len(includes)} includes found)")
+
+            for inc in includes:
+                header_path = tis_runner.find_header_files(file_info.includes, inc)
+                if header_path:
+                    header_content = tis_runner.read_remote_file(header_path)
+                    if header_content:
+                        context_files.append({"name": inc, "content": header_content})
+                        if args.verbose:
+                            print(f"  Added header: {inc}")
 
         # Extract function signature
         function_signature = extract_function_signature(source_content, args.function)
@@ -294,10 +331,13 @@ def cmd_gen(args):
             print("-" * 60)
 
         # Run workflow with step callbacks for verbose output
+        # Each iteration uses ~4 nodes, so set recursion limit accordingly
+        config = {"recursion_limit": args.max_iterations * 5 + 10}
+
         if args.verbose:
             # Stream through nodes to show progress
             print("\n[Step 1] Planning...", flush=True)
-            for step in app.stream(initial_state):
+            for step in app.stream(initial_state, config):
                 node_name = list(step.keys())[0]
                 state = step[node_name]
                 status = state.get("status", "unknown")
@@ -331,7 +371,7 @@ def cmd_gen(args):
             # Get final state
             result = state
         else:
-            result = app.invoke(initial_state)
+            result = app.invoke(initial_state, config)
 
         # Output result
         if result["status"] == "success":
@@ -347,6 +387,15 @@ def cmd_gen(args):
                     iterations=result['iteration'],
                     output_path=output_path,
                 )
+            # Log structured summary
+            struct_logger = get_structured_logger()
+            if struct_logger:
+                struct_logger.log_summary(
+                    success=True,
+                    total_iterations=result['iteration'],
+                    function_name=args.function,
+                    source_file=file_info.path,
+                )
         else:
             print(f"\nFAILED after {result['iteration']} iterations")
             if result.get("validation_errors"):
@@ -359,6 +408,15 @@ def cmd_gen(args):
                 logger.log_final_result(
                     success=False,
                     iterations=result['iteration'],
+                )
+            # Log structured summary
+            struct_logger = get_structured_logger()
+            if struct_logger:
+                struct_logger.log_summary(
+                    success=False,
+                    total_iterations=result['iteration'],
+                    function_name=args.function,
+                    source_file=file_info.path,
                 )
             sys.exit(1)
 
@@ -438,6 +496,17 @@ def main():
     gen_parser.add_argument("--tis-env-script", help=argparse.SUPPRESS)
     gen_parser.add_argument(
         "--log", "-l", help="Path to log file for detailed workflow logging"
+    )
+    gen_parser.add_argument(
+        "--with-logs",
+        metavar="DIR",
+        help="Create structured logs directory with separate files for C code, LLM queries, and validation results",
+    )
+    gen_parser.add_argument(
+        "--context",
+        choices=["none", "matching", "full"],
+        default="matching",
+        help="Context mode: none (source only), matching (source + foo.h for foo.c), full (all headers). Default: matching",
     )
     gen_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose output"

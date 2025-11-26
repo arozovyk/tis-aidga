@@ -1,8 +1,171 @@
 """Workflow logger - logs detailed workflow steps to file."""
 
+import json
 import os
 from datetime import datetime
 from typing import Optional, List, Dict, Any
+
+
+class StructuredLogger:
+    """Logs workflow artifacts to separate files in a logs directory."""
+
+    def __init__(self, logs_dir: str):
+        """
+        Initialize structured logger.
+
+        Args:
+            logs_dir: Directory to store log files
+        """
+        self.logs_dir = logs_dir
+        self._step_counter = 0
+        self._ensure_dir()
+
+    def _ensure_dir(self):
+        """Create logs directory if it doesn't exist."""
+        os.makedirs(self.logs_dir, exist_ok=True)
+
+    def _next_index(self) -> int:
+        """Get next step index."""
+        self._step_counter += 1
+        return self._step_counter
+
+    def log_driver_code(self, code: str, step: str, iteration: int) -> str:
+        """
+        Log generated C code to a file.
+
+        Args:
+            code: The C code content
+            step: Step name (generator, refiner)
+            iteration: Current iteration number
+
+        Returns:
+            Path to the created file
+        """
+        idx = self._next_index()
+        filename = f"{idx:03d}_{step}_iter{iteration}_driver.c"
+        filepath = os.path.join(self.logs_dir, filename)
+
+        with open(filepath, "w") as f:
+            f.write(f"// Step: {step}\n")
+            f.write(f"// Iteration: {iteration}\n")
+            f.write(f"// Timestamp: {datetime.now().isoformat()}\n")
+            f.write("// " + "=" * 60 + "\n\n")
+            f.write(code)
+
+        return filepath
+
+    def log_llm_query(
+        self,
+        prompt: str,
+        response: str,
+        step: str,
+        iteration: int,
+        model: str = "",
+    ) -> str:
+        """
+        Log LLM query and response to a file.
+
+        Args:
+            prompt: The prompt sent to the LLM
+            response: The LLM response
+            step: Step name (generator, refiner)
+            iteration: Current iteration number
+            model: Model name
+
+        Returns:
+            Path to the created file
+        """
+        idx = self._next_index()
+        filename = f"{idx:03d}_{step}_iter{iteration}_query.txt"
+        filepath = os.path.join(self.logs_dir, filename)
+
+        with open(filepath, "w") as f:
+            f.write(f"Step: {step}\n")
+            f.write(f"Iteration: {iteration}\n")
+            f.write(f"Model: {model}\n")
+            f.write(f"Timestamp: {datetime.now().isoformat()}\n")
+            f.write("=" * 80 + "\n\n")
+            f.write("=== PROMPT ===\n")
+            f.write(prompt)
+            f.write("\n\n" + "=" * 80 + "\n\n")
+            f.write("=== RESPONSE ===\n")
+            f.write(response)
+
+        return filepath
+
+    def log_validation(
+        self,
+        iteration: int,
+        cc_result: Optional[Dict[str, Any]],
+        tis_result: Optional[Dict[str, Any]],
+        is_valid: bool,
+    ) -> str:
+        """
+        Log validation results to a JSON file.
+
+        Args:
+            iteration: Current iteration number
+            cc_result: CC compilation result dict
+            tis_result: TIS compilation result dict
+            is_valid: Whether validation passed
+
+        Returns:
+            Path to the created file
+        """
+        idx = self._next_index()
+        filename = f"{idx:03d}_validation_iter{iteration}.json"
+        filepath = os.path.join(self.logs_dir, filename)
+
+        data = {
+            "step": "validation",
+            "iteration": iteration,
+            "timestamp": datetime.now().isoformat(),
+            "is_valid": is_valid,
+            "cc_compile": cc_result,
+            "tis_compile": tis_result,
+        }
+
+        with open(filepath, "w") as f:
+            json.dump(data, f, indent=2)
+
+        return filepath
+
+    def log_summary(
+        self,
+        success: bool,
+        total_iterations: int,
+        function_name: str,
+        source_file: str,
+    ) -> str:
+        """
+        Log final summary.
+
+        Args:
+            success: Whether generation succeeded
+            total_iterations: Total iterations performed
+            function_name: Target function name
+            source_file: Source file path
+
+        Returns:
+            Path to the created file
+        """
+        idx = self._next_index()
+        filename = f"{idx:03d}_summary.json"
+        filepath = os.path.join(self.logs_dir, filename)
+
+        data = {
+            "step": "summary",
+            "timestamp": datetime.now().isoformat(),
+            "success": success,
+            "total_iterations": total_iterations,
+            "function_name": function_name,
+            "source_file": source_file,
+        }
+
+        with open(filepath, "w") as f:
+            json.dump(data, f, indent=2)
+
+        return filepath
 
 
 class WorkflowLogger:
@@ -194,16 +357,28 @@ class WorkflowLogger:
         self._write(f"[{timestamp}] ERROR: {message}\n")
 
 
-# Global logger instance - set by CLI
+# Global logger instances - set by CLI
 _logger: Optional[WorkflowLogger] = None
+_structured_logger: Optional[StructuredLogger] = None
 
 
 def get_logger() -> Optional[WorkflowLogger]:
-    """Get the global logger instance."""
+    """Get the global workflow logger instance."""
     return _logger
 
 
 def set_logger(logger: WorkflowLogger):
-    """Set the global logger instance."""
+    """Set the global workflow logger instance."""
     global _logger
     _logger = logger
+
+
+def get_structured_logger() -> Optional[StructuredLogger]:
+    """Get the global structured logger instance."""
+    return _structured_logger
+
+
+def set_structured_logger(logger: StructuredLogger):
+    """Set the global structured logger instance."""
+    global _structured_logger
+    _structured_logger = logger
