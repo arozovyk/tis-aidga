@@ -120,6 +120,8 @@ def cc_compile(
             "-Werror",
             "-Wfatal-errors",
             "-Wno-unknown-attributes",  # Ignore TIS-specific attributes
+            "-Wno-visibility",  # Ignore visibility warnings when headers are incomplete
+            "-Wno-implicit-function-declaration",  # Allow undeclared functions (may be in missing headers)
             "-std=c11",
             "-fsyntax-only",
         ]

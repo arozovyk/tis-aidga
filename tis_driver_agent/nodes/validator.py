@@ -31,6 +31,10 @@ def validator_node(
     driver_filename = f"__tis_driver_{state['function_name']}.c"
 
     # Stage 1: CC compile locally
+    # Filter include paths to only use those that exist locally
+    # (remote paths from compilation DB won't exist on local machine)
+    local_include_paths = [p for p in include_paths if os.path.exists(p)]
+
     # Write driver to temp file for local cc check
     try:
         with tempfile.NamedTemporaryFile(
@@ -39,7 +43,7 @@ def validator_node(
             tmp.write(state["current_driver_code"])
             local_driver_path = tmp.name
 
-        cc_result = cc_compile(local_driver_path, include_paths)
+        cc_result = cc_compile(local_driver_path, local_include_paths)
 
         # Log CC result
         if logger:
