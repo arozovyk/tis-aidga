@@ -273,8 +273,45 @@ def cmd_gen(args):
             print(f"\nStarting generation with {len(context_files)} context files")
             print("-" * 60)
 
-        # Run workflow
-        result = app.invoke(initial_state)
+        # Run workflow with step callbacks for verbose output
+        if args.verbose:
+            # Stream through nodes to show progress
+            print("\n[Step 1] Planning...", flush=True)
+            for step in app.stream(initial_state):
+                node_name = list(step.keys())[0]
+                state = step[node_name]
+                status = state.get("status", "unknown")
+                iteration = state.get("iteration", 0)
+
+                if node_name == "planner":
+                    print(f"[Step 2] Routing...", flush=True)
+                elif node_name == "router":
+                    action = state.get("next_action", "generate")
+                    print(f"[Step 3] Action: {action}", flush=True)
+                    if action == "generate":
+                        print(f"[Step 4] Calling {args.model} API (this may take 30-60s)...", flush=True)
+                    elif action == "refine":
+                        print(f"[Refining] Calling {args.model} API for refinement...", flush=True)
+                elif node_name == "generator":
+                    print(f"         Generated driver code (iteration {iteration})", flush=True)
+                elif node_name == "refiner":
+                    print(f"         Refined driver code (iteration {iteration})", flush=True)
+                elif node_name == "validator":
+                    cc_result = state.get("cc_result")
+                    tis_result = state.get("tis_result")
+                    if cc_result:
+                        print(f"[Validate] CC compile: {'OK' if cc_result.get('success') else 'FAILED'}", flush=True)
+                    if tis_result:
+                        print(f"[Validate] TIS compile: {'OK' if tis_result.get('success') else 'FAILED'}", flush=True)
+                    if state.get("validation_errors"):
+                        print(f"           Errors found - will refine", flush=True)
+                elif node_name == "output_handler":
+                    print(f"[Done] Status: {status}", flush=True)
+
+            # Get final state
+            result = state
+        else:
+            result = app.invoke(initial_state)
 
         # Output result
         if result["status"] == "success":
