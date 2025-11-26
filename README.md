@@ -47,12 +47,13 @@ Create a `.env` file in the project root:
 ```bash
 cat > .env << EOF
 # Required
-SSH_PASSWORD=your_ssh_password
 OPENAI_API_KEY=sk-your-openai-api-key
-
-# Optional defaults (can also be set per-project or via CLI)
 SSH_HOST=192.168.1.100
 SSH_USER=username
+SSH_PASSWORD=your_ssh_password
+
+# TIS environment setup command (run on remote before tis-analyzer)
+TIS_ENV_SCRIPT="source /opt/tis/bin/tis-env --source && tis_choose main"
 EOF
 ```
 
@@ -170,9 +171,6 @@ tisaidga gen <project> <filename> <function> [options]
   --output, -o        Output file path
   --model             LLM model (default: gpt-4o-mini)
   --max-iterations    Max refinement iterations (default: 5)
-  --ssh-host          Override SSH host
-  --ssh-user          Override SSH username
-  --tis-env-script    Override TIS environment script
   --log, -l           Path to detailed workflow log file
   --verbose, -v       Verbose output
 ```
@@ -181,9 +179,8 @@ tisaidga gen <project> <filename> <function> [options]
 
 SSH and TIS settings are resolved in this order (first match wins):
 
-1. CLI arguments (`--ssh-host`, `--ssh-user`, etc.)
-2. Project configuration (stored during `init`)
-3. Environment variables (`SSH_HOST`, `SSH_USER`)
+1. Project configuration (stored during `init`)
+2. Environment variables (`SSH_HOST`, `SSH_USER`, `SSH_PASSWORD`, `TIS_ENV_SCRIPT`)
 
 ## Project Structure
 

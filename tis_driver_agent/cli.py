@@ -157,7 +157,7 @@ def cmd_gen(args):
     ssh_host = args.ssh_host or project_config.ssh_host or os.getenv("SSH_HOST", "")
     ssh_user = args.ssh_user or project_config.ssh_user or os.getenv("SSH_USER", "")
     ssh_password = os.getenv("SSH_PASSWORD", "")
-    tis_env_script = args.tis_env_script or project_config.tis_env_script or ""
+    tis_env_script = args.tis_env_script or project_config.tis_env_script or os.getenv("TIS_ENV_SCRIPT", "")
 
     # Build SSH config
     ssh_config = SSHConfig(
@@ -433,15 +433,9 @@ def main():
     gen_parser.add_argument(
         "--max-iterations", type=int, default=5, help="Maximum refinement iterations"
     )
-    gen_parser.add_argument(
-        "--ssh-host", help="SSH host (override project config)"
-    )
-    gen_parser.add_argument(
-        "--ssh-user", help="SSH username (override project config)"
-    )
-    gen_parser.add_argument(
-        "--tis-env-script", help="TIS environment script (override project config)"
-    )
+    gen_parser.add_argument("--ssh-host", help=argparse.SUPPRESS)
+    gen_parser.add_argument("--ssh-user", help=argparse.SUPPRESS)
+    gen_parser.add_argument("--tis-env-script", help=argparse.SUPPRESS)
     gen_parser.add_argument(
         "--log", "-l", help="Path to log file for detailed workflow logging"
     )
