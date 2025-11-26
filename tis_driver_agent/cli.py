@@ -1,9 +1,11 @@
 """CLI entry point for TIS Driver Agent."""
+# PYTHON_ARGCOMPLETE_OK
 
 import argparse
 import os
 import sys
 
+import argcomplete
 from dotenv import load_dotenv
 
 from .config import AgentConfig, ModelConfig, TISConfig, SSHConfig
@@ -18,6 +20,42 @@ from .utils.context_detector import (
 
 # Load environment variables from .env file
 load_dotenv()
+
+
+# Custom completers for argcomplete
+class ProjectCompleter:
+    """Completer for project names."""
+
+    def __call__(self, prefix, parsed_args, **kwargs):
+        pm = ProjectManager()
+        projects = pm.list_projects()
+        return [p for p in projects if p.startswith(prefix)]
+
+
+class FileCompleter:
+    """Completer for filenames within a project."""
+
+    def __call__(self, prefix, parsed_args, **kwargs):
+        if not hasattr(parsed_args, 'project') or not parsed_args.project:
+            return []
+        pm = ProjectManager()
+        if not pm.project_exists(parsed_args.project):
+            return []
+        files = pm.list_files(parsed_args.project)
+        return [f.name for f in files if f.name.startswith(prefix)]
+
+
+class ModelCompleter:
+    """Completer for model names."""
+
+    def __call__(self, prefix, parsed_args, **kwargs):
+        models = [
+            "gpt-4o-mini",
+            "gpt-4o",
+            "gpt-4-turbo",
+            "gpt-3.5-turbo",
+        ]
+        return [m for m in models if m.startswith(prefix)]
 
 
 def cmd_init(args):
@@ -298,7 +336,7 @@ def main():
     )
     list_parser.add_argument(
         "project", nargs="?", help="Project name (omit to list all projects)"
-    )
+    ).completer = ProjectCompleter()
     list_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose output"
     )
@@ -309,10 +347,10 @@ def main():
     )
     gen_parser.add_argument(
         "project", help="Project name"
-    )
+    ).completer = ProjectCompleter()
     gen_parser.add_argument(
         "filename", help="Source filename"
-    )
+    ).completer = FileCompleter()
     gen_parser.add_argument(
         "function", help="Function name"
     )
@@ -321,7 +359,7 @@ def main():
     )
     gen_parser.add_argument(
         "--model", default="gpt-4o-mini", help="Model to use (default: gpt-4o-mini)"
-    )
+    ).completer = ModelCompleter()
     gen_parser.add_argument(
         "--max-iterations", type=int, default=5, help="Maximum refinement iterations"
     )
@@ -337,6 +375,9 @@ def main():
     gen_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose output"
     )
+
+    # Enable argcomplete
+    argcomplete.autocomplete(parser)
 
     args = parser.parse_args()
 
