@@ -19,3 +19,6 @@ dev = ["pytest>=7.0.0"]
 
 [project.scripts]
 tisaidga = "tis_driver_agent.cli:main"
+
+[tool.setuptools.packages.find]
+include = ["tis_driver_agent*"]
