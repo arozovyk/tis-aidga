@@ -23,3 +23,6 @@ tisaidga = "tis_driver_agent.cli:main"
 
 [tool.setuptools.packages.find]
 include = ["tis_driver_agent*"]
+
+[tool.setuptools.package-data]
+tis_driver_agent = ["stubs/*.h"]

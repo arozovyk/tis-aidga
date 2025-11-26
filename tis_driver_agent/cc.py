@@ -1,8 +1,12 @@
 """Local C compiler validation - always runs locally."""
 
+import os
 import subprocess
 from dataclasses import dataclass
 from typing import List
+
+# Path to TIS stub headers for local CC checks
+_STUBS_DIR = os.path.join(os.path.dirname(__file__), "stubs")
 
 
 @dataclass
@@ -51,11 +55,13 @@ def cc_compile(
             "-c",
             "-Werror",
             "-Wfatal-errors",
+            "-Wno-unknown-attributes",  # Ignore TIS-specific attributes
             "-std=c11",
             "-fsyntax-only",
         ]
 
-    include_flags = [f"-I{p}" for p in include_paths]
+    # Add stubs directory first for TIS-specific headers (tis_builtin.h, etc.)
+    include_flags = [f"-I{_STUBS_DIR}"] + [f"-I{p}" for p in include_paths]
     cmd = ["cc"] + cc_flags + include_flags + [driver_path]
 
     try:
