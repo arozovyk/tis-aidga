@@ -1,0 +1,6 @@
+.env
+cd.json
+docs/
+phase1/
+reference_scripts/
+__pycache__

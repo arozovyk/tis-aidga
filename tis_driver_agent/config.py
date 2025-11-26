@@ -18,6 +18,17 @@ class ModelConfig:
 
 
 @dataclass
+class SSHConfig:
+    """SSH connection configuration."""
+
+    host: str = ""
+    user: str = ""
+    password: str = field(default_factory=lambda: os.getenv("SSH_PASSWORD", ""))
+    port: int = 22
+    tis_env_script: str = ""  # Script to source TIS environment
+
+
+@dataclass
 class TISConfig:
     """TIS Analyzer configuration."""
 
@@ -27,23 +38,10 @@ class TISConfig:
     tis_path: str = "tis-analyzer"
 
     # SSH mode settings
-    ssh_host: str = ""
-    ssh_user: str = ""
-    ssh_password: str = field(default_factory=lambda: os.getenv("SSH_PASSWORD", ""))
-    ssh_port: int = 22
+    ssh: SSHConfig = field(default_factory=SSHConfig)
     remote_work_dir: str = ""
-    tis_env_script: str = ""  # e.g., "source /path/to/tis-env --source && tis_choose main"
 
-    # Compilation settings
-    cc_flags: List[str] = field(
-        default_factory=lambda: [
-            "-c",
-            "-Werror",
-            "-Wfatal-errors",
-            "-std=c11",
-            "-fsyntax-only",
-        ]
-    )
+    # TIS settings
     machdep: str = "gcc_x86_64"
 
 
