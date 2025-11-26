@@ -1,8 +1,35 @@
+# Environment and secrets
 .env
+
+# Project data
+.tisaidga/
+
+# Python
+__pycache__/
+*.py[cod]
+*$py.class
+*.egg-info/
+.venv/
+venv/
+*.egg
+
+# Testing
+.pytest_cache/
+.coverage
+htmlcov/
+
+# IDE
+.idea/
+.vscode/
+*.swp
+*.swo
+
+# Build
+dist/
+build/
+
+# Project specific
 cd.json
 docs/
 phase1/
 reference_scripts/
-__pycache__
-*.egg-info
-.venv/
