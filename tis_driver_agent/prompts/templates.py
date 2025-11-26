@@ -132,7 +132,17 @@ def build_refiner_prompt(
     current_code: str, errors: list, iteration: int, max_iterations: int
 ) -> str:
     """Build the refinement prompt."""
-    error_text = "\n".join(errors) if errors else "Unknown error"
+    if errors:
+        error_text = "\n".join(errors)
+    else:
+        error_text = (
+            "Compilation failed but no specific error messages were captured. "
+            "Common issues to check:\n"
+            "- Incompatible type declarations between driver and source\n"
+            "- Missing or incorrect struct definitions\n"
+            "- Function signature mismatches\n"
+            "- Missing #include directives"
+        )
     return REFINER_TEMPLATE.format(
         current_code=current_code,
         errors=error_text,

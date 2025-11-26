@@ -16,6 +16,7 @@ from .utils.project_manager import ProjectManager
 from .utils.context_detector import (
     parse_includes,
     extract_function_signature,
+    extract_function,
 )
 from .workflow_logger import (
     WorkflowLogger,
@@ -238,15 +239,30 @@ def cmd_gen(args):
             sys.exit(1)
 
         # Build context based on --context mode
-        context_files = [{"name": file_info.name, "content": source_content}]
+        context_files = []
 
-        if args.context == "none":
-            # No headers - source file only
+        if args.context == "function":
+            # Extract only the target function
+            func_code = extract_function(source_content, args.function)
+            if func_code:
+                context_files.append({"name": f"{args.function}()", "content": func_code})
+                if args.verbose:
+                    print(f"Context mode: function (extracted {len(func_code)} chars)")
+            else:
+                # Fallback to full source if extraction fails
+                context_files.append({"name": file_info.name, "content": source_content})
+                if args.verbose:
+                    print(f"Context mode: function (extraction failed, using full source)")
+
+        elif args.context == "source":
+            # Full source file only
+            context_files.append({"name": file_info.name, "content": source_content})
             if args.verbose:
-                print("Context mode: none (source file only)")
+                print("Context mode: source (full source file)")
 
         elif args.context == "matching":
-            # Matching header only (foo.c -> foo.h)
+            # Source + matching header (foo.c -> foo.h)
+            context_files.append({"name": file_info.name, "content": source_content})
             base_name = os.path.splitext(file_info.name)[0]
             matching_header = f"{base_name}.h"
 
@@ -264,7 +280,8 @@ def cmd_gen(args):
                 print(f"  No matching header found")
 
         elif args.context == "full":
-            # Full context: fetch ALL headers from includes
+            # Full context: source + ALL headers from includes
+            context_files.append({"name": file_info.name, "content": source_content})
             includes = parse_includes(source_content)
             if args.verbose:
                 print(f"Context mode: full ({len(includes)} includes found)")
@@ -504,9 +521,9 @@ def main():
     )
     gen_parser.add_argument(
         "--context",
-        choices=["none", "matching", "full"],
-        default="matching",
-        help="Context mode: none (source only), matching (source + foo.h for foo.c), full (all headers). Default: matching",
+        choices=["function", "source", "matching", "full"],
+        default="function",
+        help="Context mode: function (extracted function only), source (full source file), matching (source + matching header), full (all headers). Default: function",
     )
     gen_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose output"

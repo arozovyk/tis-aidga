@@ -1,6 +1,7 @@
 """Local C compiler validation - always runs locally."""
 
 import os
+import re
 import subprocess
 from dataclasses import dataclass
 from typing import List
@@ -21,12 +22,75 @@ class CCResult:
     command: str
 
 
-def parse_cc_errors(stderr: str) -> List[str]:
-    """Extract error messages from cc output."""
+def parse_cc_errors(stderr: str, stdout: str = "") -> List[str]:
+    """Extract error messages from cc output.
+
+    Handles multiple compiler error formats:
+    - file:line:col: error: message
+    - file:line:col: fatal error: message
+    - file:line: error: message (no column)
+    - error: message (no file location)
+    - Clang/GCC specific diagnostics
+    """
     errors = []
-    for line in stderr.split("\n"):
-        if "error:" in line.lower():
-            errors.append(line.strip())
+    seen = set()  # Avoid duplicates
+
+    # Combine stderr and stdout (some compilers output to stdout)
+    combined = f"{stderr}\n{stdout}"
+    lines = combined.split("\n")
+
+    for i, line in enumerate(lines):
+        line_stripped = line.strip()
+        if not line_stripped:
+            continue
+
+        # Skip if already seen
+        if line_stripped in seen:
+            continue
+
+        # Pattern 1: file:line:col: [fatal] error: message (most common)
+        if re.search(r':\d+:.*(?:fatal\s+)?error:', line, re.IGNORECASE):
+            errors.append(line_stripped)
+            seen.add(line_stripped)
+            continue
+
+        # Pattern 2: Just "error:" without file location
+        if re.match(r'^error:', line_stripped, re.IGNORECASE):
+            errors.append(line_stripped)
+            seen.add(line_stripped)
+            continue
+
+        # Pattern 3: "N error(s) generated" summary - skip but indicates errors exist
+        if re.match(r'^\d+\s+errors?\s+generated', line_stripped, re.IGNORECASE):
+            continue
+
+        # Pattern 4: Linker errors (undefined reference, etc.)
+        if 'undefined reference' in line.lower() or 'undefined symbol' in line.lower():
+            errors.append(line_stripped)
+            seen.add(line_stripped)
+            continue
+
+        # Pattern 5: ld: errors
+        if re.match(r'^ld:', line_stripped) and 'error' in line.lower():
+            errors.append(line_stripped)
+            seen.add(line_stripped)
+            continue
+
+    # Fallback: if compilation failed but no specific errors found
+    if not errors and ('error' in combined.lower() or 'fatal' in combined.lower()):
+        # Extract any line that looks diagnostic
+        for line in lines:
+            line_stripped = line.strip()
+            if not line_stripped or line_stripped in seen:
+                continue
+            # Look for diagnostic-like lines
+            if any(kw in line.lower() for kw in ['error', 'fatal', 'undefined', 'redefinition', 'undeclared']):
+                if len(line_stripped) < 500:  # Reasonable length
+                    errors.append(line_stripped)
+                    seen.add(line_stripped)
+                    if len(errors) >= 10:
+                        break
+
     return errors
 
 
@@ -69,7 +133,7 @@ def cc_compile(
             cmd, capture_output=True, text=True, timeout=timeout
         )
 
-        errors = parse_cc_errors(result.stderr) if result.returncode != 0 else []
+        errors = parse_cc_errors(result.stderr, result.stdout) if result.returncode != 0 else []
 
         return CCResult(
             success=result.returncode == 0,
