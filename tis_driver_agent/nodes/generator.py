@@ -3,6 +3,7 @@
 from ..state import DriverState
 from ..models.openai_adapter import OpenAIAdapter
 from ..prompts.templates import build_generation_prompt
+from ..workflow_logger import get_logger
 
 
 def generator_node(state: DriverState, model_adapter: OpenAIAdapter) -> DriverState:
@@ -21,9 +22,17 @@ def generator_node(state: DriverState, model_adapter: OpenAIAdapter) -> DriverSt
     # Extract code
     driver_code = model_adapter.extract_code(response)
 
+    iteration = state.get("iteration", 0) + 1
+
+    # Log generated code
+    logger = get_logger()
+    if logger:
+        logger.log_step("GENERATOR", iteration)
+        logger.log_generated_code(driver_code, iteration)
+
     return {
         **state,
         "current_driver_code": driver_code,
-        "iteration": state.get("iteration", 0) + 1,
+        "iteration": iteration,
         "status": "generating",
     }

@@ -6,6 +6,7 @@ import os
 from ..state import DriverState
 from ..cc import cc_compile
 from ..tis import TISRunnerBase
+from ..workflow_logger import get_logger
 
 
 def validator_node(
@@ -17,6 +18,11 @@ def validator_node(
     1. Basic C compilation (cc) - always runs locally
     2. TIS Analyzer compilation - runs via tis_runner (local or remote)
     """
+    iteration = state.get("iteration", 0)
+    logger = get_logger()
+    if logger:
+        logger.log_step("VALIDATOR", iteration)
+
     errors = []
     include_paths = state.get("include_paths", [])
     source_file = state["source_file"]
@@ -35,6 +41,17 @@ def validator_node(
 
         cc_result = cc_compile(local_driver_path, include_paths)
 
+        # Log CC result
+        if logger:
+            logger.log_cc_result(
+                success=cc_result.success,
+                command=cc_result.command,
+                exit_code=cc_result.exit_code,
+                stdout=cc_result.stdout,
+                stderr=cc_result.stderr,
+                errors=cc_result.errors,
+            )
+
         if not cc_result.success:
             errors.append(
                 {
@@ -43,6 +60,14 @@ def validator_node(
                     "stderr": cc_result.stderr,
                 }
             )
+            # Log validation decision for CC failure
+            if logger:
+                logger.log_validation_decision(
+                    is_valid=False,
+                    cc_success=False,
+                    tis_success=False,
+                    error_summary=f"CC failed with {len(cc_result.errors)} errors (TIS not attempted)",
+                )
             return {
                 **state,
                 "cc_result": {
@@ -82,6 +107,17 @@ def validator_node(
             compilation_db=None,  # Use include paths instead
         )
 
+        # Log TIS result
+        if logger:
+            logger.log_tis_result(
+                success=tis_result.success,
+                command=tis_result.command,
+                exit_code=tis_result.exit_code,
+                stdout=tis_result.stdout,
+                stderr=tis_result.stderr,
+                errors=tis_result.errors,
+            )
+
         if not tis_result.success:
             errors.append(
                 {
@@ -89,6 +125,21 @@ def validator_node(
                     "errors": tis_result.errors,
                     "stderr": tis_result.stderr,
                 }
+            )
+
+        # Log validation decision
+        is_valid = cc_result.success and tis_result.success
+        if logger:
+            error_summary = ""
+            if not cc_result.success:
+                error_summary = f"CC failed with {len(cc_result.errors)} errors"
+            elif not tis_result.success:
+                error_summary = f"TIS failed with {len(tis_result.errors)} errors"
+            logger.log_validation_decision(
+                is_valid=is_valid,
+                cc_success=cc_result.success,
+                tis_success=tis_result.success,
+                error_summary=error_summary,
             )
 
         return {

@@ -17,6 +17,7 @@ from .utils.context_detector import (
     parse_includes,
     extract_function_signature,
 )
+from .workflow_logger import WorkflowLogger, set_logger
 
 # Load environment variables from .env file
 load_dotenv()
@@ -187,6 +188,14 @@ def cmd_gen(args):
         print("Error: SSH_PASSWORD environment variable is required.")
         sys.exit(1)
 
+    # Initialize logger if --log is specified
+    logger = None
+    if args.log:
+        logger = WorkflowLogger(args.log)
+        set_logger(logger)
+        if args.verbose:
+            print(f"Logging to: {args.log}")
+
     if args.verbose:
         print(f"Generating driver for: {args.function}")
         print(f"Project: {args.project}")
@@ -269,6 +278,17 @@ def cmd_gen(args):
             "next_action": None,
         }
 
+        # Log configuration
+        if logger:
+            logger.log_config(
+                function_name=args.function,
+                source_file=file_info.path,
+                model=args.model,
+                max_iterations=args.max_iterations,
+                context_file_count=len(context_files),
+                include_paths=file_info.includes,
+            )
+
         if args.verbose:
             print(f"\nStarting generation with {len(context_files)} context files")
             print("-" * 60)
@@ -320,6 +340,13 @@ def cmd_gen(args):
                 f.write(result["final_driver"])
             print(f"\nSUCCESS: Driver written to {output_path}")
             print(f"Iterations: {result['iteration']}")
+            # Log final result
+            if logger:
+                logger.log_final_result(
+                    success=True,
+                    iterations=result['iteration'],
+                    output_path=output_path,
+                )
         else:
             print(f"\nFAILED after {result['iteration']} iterations")
             if result.get("validation_errors"):
@@ -327,6 +354,12 @@ def cmd_gen(args):
                 for err in result["validation_errors"]:
                     for e in err.get("errors", []):
                         print(f"  - {e}")
+            # Log final result
+            if logger:
+                logger.log_final_result(
+                    success=False,
+                    iterations=result['iteration'],
+                )
             sys.exit(1)
 
     finally:
@@ -408,6 +441,9 @@ def main():
     )
     gen_parser.add_argument(
         "--tis-env-script", help="TIS environment script (override project config)"
+    )
+    gen_parser.add_argument(
+        "--log", "-l", help="Path to log file for detailed workflow logging"
     )
     gen_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose output"

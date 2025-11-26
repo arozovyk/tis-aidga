@@ -148,6 +148,7 @@ tisaidga gen json-c json_object.c json_object_equal \
   --output drivers/my_driver.c \
   --model gpt-4o \
   --max-iterations 10 \
+  --log workflow.log \
   -v
 ```
 
@@ -172,6 +173,7 @@ tisaidga gen <project> <filename> <function> [options]
   --ssh-host          Override SSH host
   --ssh-user          Override SSH username
   --tis-env-script    Override TIS environment script
+  --log, -l           Path to detailed workflow log file
   --verbose, -v       Verbose output
 ```
 
@@ -226,6 +228,7 @@ tis_driver_agent/
 ├── state.py            # LangGraph state schema
 ├── graph.py            # LangGraph workflow
 ├── cc.py               # Local C compiler validation
+├── workflow_logger.py  # Detailed workflow logging
 ├── nodes/              # LangGraph nodes
 │   ├── planner.py
 │   ├── router.py
@@ -269,6 +272,17 @@ tis_driver_agent/
 - Try increasing `--max-iterations`
 - Use a more capable model: `--model gpt-4o`
 - Check if the function has complex dependencies
+- Use `--log workflow.log` to see detailed error information
+
+### Understanding the workflow log
+
+When using `--log`, the log file contains:
+- Configuration summary (function, model, include paths)
+- Each generated/refined driver code (full C source)
+- CC compilation output (command, stdout, stderr, parsed errors)
+- TIS compilation output (command, stdout, stderr, parsed errors)
+- Validation decisions with reasoning
+- Final result summary
 
 ## License
 
