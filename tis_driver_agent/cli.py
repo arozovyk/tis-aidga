@@ -12,6 +12,7 @@ from .config import AgentConfig, ModelConfig, TISConfig, SSHConfig
 from .models.openai_adapter import OpenAIAdapter
 from .models.ollama_adapter import OllamaAdapter
 from .tis.remote import RemoteTISRunner
+from .tis.local import LocalTISRunner
 
 # Known Ollama model prefixes (for auto-detection)
 OLLAMA_MODELS = [
@@ -226,7 +227,10 @@ def cmd_gen(args):
     ssh_password = os.getenv("SSH_PASSWORD", "")
     tis_env_script = args.tis_env_script or project_config.tis_env_script or os.getenv("TIS_ENV_SCRIPT", "")
 
-    # Build SSH config
+    # Determine mode: local if SSH not configured, otherwise SSH
+    use_local_mode = not ssh_host or not ssh_user
+
+    # Build SSH config (may be empty for local mode)
     ssh_config = SSHConfig(
         host=ssh_host,
         user=ssh_user,
@@ -238,22 +242,18 @@ def cmd_gen(args):
     config = AgentConfig(
         model=ModelConfig(model=args.model),
         tis=TISConfig(
-            mode="ssh",
+            mode="local" if use_local_mode else "ssh",
             ssh=ssh_config,
             remote_work_dir=project_config.remote_work_dir,
         ),
         max_iterations=args.max_iterations,
     )
 
-    # Validate SSH config
-    if not ssh_config.host or not ssh_config.user:
-        print("Error: SSH host and user are required.")
-        print("Set via --ssh-host/--ssh-user, project config, or SSH_HOST/SSH_USER env vars.")
-        sys.exit(1)
-
-    if not ssh_config.password:
-        print("Error: SSH_PASSWORD environment variable is required.")
-        sys.exit(1)
+    # Validate SSH config only if using SSH mode
+    if not use_local_mode:
+        if not ssh_config.password:
+            print("Error: SSH_PASSWORD environment variable is required for SSH mode.")
+            sys.exit(1)
 
     # Initialize logger if --log is specified
     logger = None
@@ -278,22 +278,35 @@ def cmd_gen(args):
         print(f"Generating driver for: {args.function}")
         print(f"Project: {args.project}")
         print(f"File: {file_info.name} ({file_info.path})")
-        print(f"SSH: {ssh_config.user}@{ssh_config.host}")
-        print(f"Remote dir: {project_config.remote_work_dir}")
+        if use_local_mode:
+            print(f"Mode: local")
+            print(f"Work dir: {project_config.remote_work_dir}")
+        else:
+            print(f"Mode: SSH ({ssh_config.user}@{ssh_config.host})")
+            print(f"Remote dir: {project_config.remote_work_dir}")
         print(f"Model: {args.model}")
         print("-" * 60)
 
-    # Create TIS runner and connect
-    tis_runner = RemoteTISRunner(
-        ssh_config=ssh_config,
-        remote_work_dir=project_config.remote_work_dir,
-    )
+    # Create TIS runner based on mode
+    if use_local_mode:
+        tis_runner = LocalTISRunner(
+            work_dir=project_config.remote_work_dir,
+            tis_env_script=tis_env_script,
+        )
+    else:
+        tis_runner = RemoteTISRunner(
+            ssh_config=ssh_config,
+            remote_work_dir=project_config.remote_work_dir,
+        )
 
     try:
         tis_runner.connect()
 
         if args.verbose:
-            print("Connected to remote server")
+            if use_local_mode:
+                print("Running in local mode")
+            else:
+                print("Connected to remote server")
 
         # Fetch source file content
         source_content = tis_runner.read_remote_file(file_info.path)
@@ -504,7 +517,7 @@ def cmd_gen(args):
 
     finally:
         tis_runner.disconnect()
-        if args.verbose:
+        if args.verbose and not use_local_mode:
             print("Disconnected from remote server")
 
 
