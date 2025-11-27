@@ -23,6 +23,7 @@ htmlcov/
 .vscode/
 *.swp
 *.swo
+.DS_Store
 
 # Build
 dist/
@@ -35,3 +36,5 @@ phase1/
 reference_scripts/
 logs
 drivers/
+benchmark_results/
+site/
