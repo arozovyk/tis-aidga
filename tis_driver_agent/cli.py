@@ -212,7 +212,7 @@ def cmd_gen(args):
     structured_logger = None
     if args.with_logs:
         from datetime import datetime
-        timestamp = datetime.now().strftime("%m_%d-%Hh%M")
+        timestamp = datetime.now().strftime("%m_%d-%Hh%M%S")
         logs_dir = f"logs/log_{timestamp}"
         structured_logger = StructuredLogger(logs_dir)
         set_structured_logger(structured_logger)

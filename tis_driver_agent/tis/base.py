@@ -1,8 +1,8 @@
 """Abstract base class for TIS runners."""
 
 from abc import ABC, abstractmethod
-from dataclasses import dataclass
-from typing import List, Optional
+from dataclasses import dataclass, field
+from typing import List, Optional, Dict, Any
 import re
 
 
@@ -16,6 +16,7 @@ class TISResult:
     exit_code: int
     errors: List[str]
     command: str
+    info_json: Optional[Dict[str, Any]] = field(default=None)
 
 
 class TISRunnerBase(ABC):

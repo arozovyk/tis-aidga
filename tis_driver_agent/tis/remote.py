@@ -1,6 +1,7 @@
 """Remote TIS runner - connects via SSH."""
 
-from typing import List, Optional
+import json
+from typing import List, Optional, Dict, Any
 
 try:
     import paramiko
@@ -89,22 +90,34 @@ class RemoteTISRunner(TISRunnerBase):
         source_files: List[str],
         reference_file: str,
         compilation_db: Optional[str] = None,
+        function_name: Optional[str] = None,
     ) -> TISResult:
-        """Run TIS Analyzer compilation check on remote."""
-        cpp_compile_like = f"{driver_path}:{reference_file}"
+        """Run TIS Analyzer value analysis on remote."""
         sources = " ".join(source_files)
+        info_json_file = "tis_info_results.json"
+
+        # Derive driver entry point from function name or driver path
+        if function_name:
+            main_entry = f"__tis_{function_name}_driver"
+        else:
+            # Extract from driver path: __tis_driver_foo.c -> __tis_foo_driver
+            import re
+            match = re.search(r'__tis_driver_(\w+)\.c', driver_path)
+            if match:
+                main_entry = f"__tis_{match.group(1)}_driver"
+            else:
+                main_entry = "main"
 
         cmd_parts = [f"cd {self.remote_work_dir} && tis-analyzer"]
 
-        if compilation_db:
-            cmd_parts.append(f"-compilation-database {compilation_db}")
-
         cmd_parts.extend(
             [
-                f"-cpp-compile-like {cpp_compile_like}",
                 driver_path,
                 sources,
+                "-val",
+                f"-main {main_entry}",
                 f"-machdep {self.machdep}",
+                f"-info-json-results {info_json_file}",
             ]
         )
 
@@ -117,6 +130,9 @@ class RemoteTISRunner(TISRunnerBase):
             errors = self.parse_tis_errors(output)
             success = exit_code == 0 and len(errors) == 0
 
+            # Try to fetch and parse the JSON results file
+            info_json = self._fetch_info_json(info_json_file)
+
             return TISResult(
                 success=success,
                 stdout=stdout,
@@ -124,6 +140,7 @@ class RemoteTISRunner(TISRunnerBase):
                 exit_code=exit_code,
                 errors=errors,
                 command=cmd,
+                info_json=info_json,
             )
         except Exception as e:
             return TISResult(
@@ -133,7 +150,21 @@ class RemoteTISRunner(TISRunnerBase):
                 exit_code=-1,
                 errors=[str(e)],
                 command=cmd,
+                info_json=None,
             )
+
+    def _fetch_info_json(self, json_filename: str) -> Optional[Dict[str, Any]]:
+        """Fetch and parse the TIS info JSON results file from remote."""
+        try:
+            json_path = f"{self.remote_work_dir}/{json_filename}"
+            content = self.read_remote_file(json_path)
+            if content:
+                # Clean up the file after reading
+                self._run_command(f"rm -f {json_path}")
+                return json.loads(content)
+        except (json.JSONDecodeError, Exception):
+            pass
+        return None
 
     def write_driver(self, driver_code: str, driver_path: str) -> bool:
         """Write driver code to remote file."""

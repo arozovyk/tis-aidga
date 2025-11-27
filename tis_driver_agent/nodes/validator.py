@@ -62,7 +62,8 @@ def validator_node(
             driver_path=driver_filename,
             source_files=[source_file],
             reference_file=source_file,
-            compilation_db=None,  # Use include paths instead
+            compilation_db=None,
+            function_name=state["function_name"],
         )
 
         # Log TIS result
@@ -120,6 +121,7 @@ def validator_node(
                     "errors": tis_result.errors,
                     "stdout": tis_result.stdout,
                     "stderr": tis_result.stderr,
+                    "info_json": tis_result.info_json,
                 },
                 is_valid=is_valid,
             )
@@ -135,6 +137,7 @@ def validator_node(
                 "success": tis_result.success,
                 "errors": tis_result.errors,
                 "command": tis_result.command,
+                "info_json": tis_result.info_json,
             },
             "validation_errors": errors,
             "status": "validating",
