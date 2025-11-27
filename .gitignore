@@ -37,3 +37,8 @@ reference_scripts/
 logs
 benchmark_results/
 site/
+
+# GUI
+gui/node_modules/
+gui/dist/
+gui/.vite/
