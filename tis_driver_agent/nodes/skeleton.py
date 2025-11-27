@@ -33,7 +33,7 @@ def skeleton_node(state: DriverState, tis_runner) -> DriverState:
             if logger:
                 logger.log_message(f"⚠️  {error_msg}")
             if structured_logger:
-                structured_logger.log_message(error_msg, step="skeleton", level="warning")
+                structured_logger.log_error(f"[skeleton] {error_msg}")
 
             return {
                 **state,
@@ -64,7 +64,7 @@ def skeleton_node(state: DriverState, tis_runner) -> DriverState:
         if logger:
             logger.log_message(f"⚠️  {error_msg}")
         if structured_logger:
-            structured_logger.log_message(error_msg, step="skeleton", level="error")
+            structured_logger.log_error(f"[skeleton] {error_msg}")
 
         return {
             **state,
