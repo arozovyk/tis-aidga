@@ -201,11 +201,62 @@ class RemoteTISRunner(TISRunnerBase):
             if exit_code != 0:
                 return None
 
-            # The skeleton is printed to stdout
-            return stdout.strip()
+            # Parse the skeleton output to extract only the code
+            return self._parse_skeleton_output(stdout)
 
         except Exception:
             return None
+
+    def _parse_skeleton_output(self, output: str) -> Optional[str]:
+        """
+        Parse TIS skeleton output to extract only the generated code.
+
+        The output format is:
+        [kernel] ... parsing info ...
+        [codegen] <code here with indentation>
+        [time] ... performance info ...
+
+        Returns:
+            Extracted code or None if parsing fails
+        """
+        lines = output.split('\n')
+        code_lines = []
+        in_codegen = False
+
+        for line in lines:
+            # Start capturing after [codegen]
+            if line.startswith('[codegen]'):
+                in_codegen = True
+                # Extract code from the [codegen] line itself (after the tag)
+                code_part = line[len('[codegen]'):].strip()
+                if code_part:
+                    code_lines.append(code_part)
+                continue
+
+            # Stop at [time] or other tags
+            if line.startswith('[time]') or line.startswith('[kernel]'):
+                if in_codegen:
+                    break
+                continue
+
+            # Capture indented code lines (TIS indents with spaces)
+            if in_codegen:
+                # Remove the leading indentation (TIS uses consistent indentation)
+                if line.startswith('          '):  # 10 spaces TIS prefix
+                    code_lines.append(line[10:])
+                elif line.strip() == '':
+                    code_lines.append('')  # Preserve empty lines
+                else:
+                    code_lines.append(line)
+
+        if not code_lines:
+            return None
+
+        # Remove trailing empty lines
+        while code_lines and not code_lines[-1].strip():
+            code_lines.pop()
+
+        return '\n'.join(code_lines)
 
     def __enter__(self):
         self.connect()
