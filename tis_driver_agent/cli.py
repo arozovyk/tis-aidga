@@ -206,10 +206,13 @@ def cmd_gen(args):
     # Initialize structured logger if --with-logs is specified
     structured_logger = None
     if args.with_logs:
-        structured_logger = StructuredLogger(args.with_logs)
+        from datetime import datetime
+        timestamp = datetime.now().strftime("%m_%d-%Hh%M")
+        logs_dir = f"logs/log_{timestamp}"
+        structured_logger = StructuredLogger(logs_dir)
         set_structured_logger(structured_logger)
         if args.verbose:
-            print(f"Structured logs directory: {args.with_logs}")
+            print(f"Structured logs directory: {logs_dir}")
 
     if args.verbose:
         print(f"Generating driver for: {args.function}")
@@ -517,8 +520,8 @@ def main():
     )
     gen_parser.add_argument(
         "--with-logs",
-        metavar="DIR",
-        help="Create structured logs directory with separate files for C code, LLM queries, and validation results",
+        action="store_true",
+        help="Create structured logs in logs/log_<timestamp>/ with separate files for C code, LLM queries, and validation results",
     )
     gen_parser.add_argument(
         "--context",
