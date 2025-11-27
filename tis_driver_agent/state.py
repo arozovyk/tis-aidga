@@ -16,6 +16,7 @@ class DriverState(TypedDict):
 
     # Processing
     plan: Optional[str]
+    skeleton_code: Optional[str]  # Generated skeleton from tis-analyzer
     current_driver_code: Optional[str]
     iteration: int
     max_iterations: int

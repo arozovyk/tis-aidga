@@ -160,6 +160,53 @@ class RemoteTISRunner(TISRunnerBase):
         except Exception:
             pass
 
+    def generate_skeleton(
+        self,
+        function_name: str,
+        source_files: List[str],
+        include_paths: List[str],
+        compilation_db: Optional[str] = None,
+    ) -> Optional[str]:
+        """
+        Generate driver skeleton using tis-analyzer -drivergen-skeleton.
+
+        Args:
+            function_name: Name of the function to generate skeleton for
+            source_files: List of source files
+            include_paths: List of include paths
+            compilation_db: Optional path to compilation database
+
+        Returns:
+            Generated skeleton code or None if failed
+        """
+        sources = " ".join(source_files)
+        cmd_parts = [f"cd {self.remote_work_dir} && tis-analyzer"]
+
+        if compilation_db:
+            cmd_parts.append(f"-compilation-database {compilation_db}")
+
+        cmd_parts.extend(
+            [
+                sources,
+                f"-drivergen-skeleton {function_name}",
+                f"-machdep {self.machdep}",
+            ]
+        )
+
+        cmd = " ".join(cmd_parts)
+
+        try:
+            stdout, stderr, exit_code = self._run_command(cmd, with_tis_env=True)
+
+            if exit_code != 0:
+                return None
+
+            # The skeleton is printed to stdout
+            return stdout.strip()
+
+        except Exception:
+            return None
+
     def __enter__(self):
         self.connect()
         return self

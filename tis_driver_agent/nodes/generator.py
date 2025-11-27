@@ -14,6 +14,7 @@ def generator_node(state: DriverState, model_adapter: OpenAIAdapter) -> DriverSt
         function_name=state["function_name"],
         context_contents=state["context_files"],
         include_paths=state.get("include_paths", []),
+        skeleton_code=state.get("skeleton_code"),
     )
 
     # Query model

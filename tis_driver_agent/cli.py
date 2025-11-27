@@ -320,6 +320,7 @@ def cmd_gen(args):
             "include_paths": file_info.includes,
             "remote_work_dir": project_config.remote_work_dir,
             "plan": None,
+            "skeleton_code": None,
             "current_driver_code": None,
             "iteration": 0,
             "max_iterations": args.max_iterations,

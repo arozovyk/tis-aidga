@@ -76,7 +76,7 @@ class StructuredLogger:
             Path to the created file
         """
         idx = self._next_index()
-        filename = f"{idx:03d}_{step}_iter{iteration}_query.txt"
+        filename = f"{idx:03d}_{step}_iter{iteration}_query.md"
         filepath = os.path.join(self.logs_dir, filename)
 
         with open(filepath, "w") as f:
