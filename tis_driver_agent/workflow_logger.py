@@ -128,6 +128,63 @@ class StructuredLogger:
         with open(filepath, "w") as f:
             json.dump(data, f, indent=2)
 
+        # If validation failed, also create a plain text error file
+        if not is_valid:
+            self._log_validation_error(iteration, cc_result, tis_result)
+
+        return filepath
+
+    def _log_validation_error(
+        self,
+        iteration: int,
+        cc_result: Optional[Dict[str, Any]],
+        tis_result: Optional[Dict[str, Any]],
+    ) -> str:
+        """
+        Log validation errors to a plain text file for easy viewing.
+
+        Args:
+            iteration: Current iteration number
+            cc_result: CC compilation result dict
+            tis_result: TIS compilation result dict
+
+        Returns:
+            Path to the created file
+        """
+        idx = self._next_index()
+        filename = f"{idx:03d}_validation_iter{iteration}_error.txt"
+        filepath = os.path.join(self.logs_dir, filename)
+
+        lines = []
+
+        # CC errors
+        if cc_result and not cc_result.get("success", True):
+            lines.append("=== CC Compilation Errors ===")
+            lines.append("")
+            if cc_result.get("errors"):
+                for err in cc_result["errors"]:
+                    lines.append(err)
+                    lines.append("")
+            if cc_result.get("stdout"):
+                lines.append("Output:")
+                lines.append(cc_result["stdout"])
+                lines.append("")
+
+        # TIS errors
+        if tis_result and not tis_result.get("success", True):
+            lines.append("=== TIS Compilation Errors ===")
+            lines.append("")
+            if tis_result.get("errors"):
+                for err in tis_result["errors"]:
+                    lines.append(err)
+                    lines.append("")
+            if tis_result.get("stdout"):
+                lines.append("Output:")
+                lines.append(tis_result["stdout"])
+
+        with open(filepath, "w") as f:
+            f.write("\n".join(lines))
+
         return filepath
 
     def log_summary(
