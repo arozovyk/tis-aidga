@@ -331,22 +331,39 @@ def write_summary(all_results: Dict[str, List[RunResult]], output_dir: str = "be
 
 def main():
     """Run the full benchmark."""
-    models = [
-        "gpt-4o-mini",      # $0.15 input, $0.60 output - proven, widely used
-        "gpt-4.1-mini",     # $0.40 input, $1.60 output - newer, improved
-        "gpt-4.1-nano",     # $0.10 input, $0.40 output - very cheap
-        "gpt-5-nano",       # $0.05 input, $0.40 output - cheapest
-        "gpt-5-mini",       # $0.25 input, $2.00 output - gpt-5 architecture
-    ]
+    import argparse
 
-    runs_per_model = 10
-    max_iterations = 3
+    parser = argparse.ArgumentParser(description="Benchmark TIS driver generation")
+    parser.add_argument("--local", action="store_true",
+                        help="Run only local Ollama model (gemma3:12b-it-q4_K_M)")
+    parser.add_argument("--runs", type=int, default=10,
+                        help="Number of runs per model (default: 10)")
+    parser.add_argument("--max-iterations", type=int, default=3,
+                        help="Max iterations per run (default: 3)")
+    args = parser.parse_args()
+
+    if args.local:
+        models = [
+            "gemma3:12b-it-q4_K_M",  # Local Ollama model
+        ]
+    else:
+        models = [
+            "gpt-4o-mini",      # $0.15 input, $0.60 output - proven, widely used
+            "gpt-4.1-mini",     # $0.40 input, $1.60 output - newer, improved
+            "gpt-4.1-nano",     # $0.10 input, $0.40 output - very cheap
+            "gpt-5-nano",       # $0.05 input, $0.40 output - cheapest
+            "gpt-5-mini",       # $0.25 input, $2.00 output - gpt-5 architecture
+        ]
+
+    runs_per_model = args.runs
+    max_iterations = args.max_iterations
 
     all_results: Dict[str, List[RunResult]] = {}
 
     print("="*60)
     print("TIS Driver Generation Benchmark")
     print("="*60)
+    print(f"Mode: {'LOCAL (Ollama)' if args.local else 'CLOUD (OpenAI)'}")
     print(f"Models: {', '.join(models)}")
     print(f"Runs per model: {runs_per_model}")
     print(f"Max iterations per run: {max_iterations}")
