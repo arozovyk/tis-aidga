@@ -58,10 +58,15 @@ class ModelCompleter:
 
     def __call__(self, prefix, parsed_args, **kwargs):
         models = [
-            "gpt-4o-mini",
+            # Cheap models (<$0.40/1M input)
+            "gpt-4o-mini",      # $0.15 input, $0.60 output - proven, widely used
+            "gpt-4.1-mini",     # $0.40 input, $1.60 output - newer, improved
+            "gpt-4.1-nano",     # $0.10 input, $0.40 output - very cheap
+            "gpt-5-nano",       # $0.05 input, $0.40 output - cheapest
+            "gpt-5-mini",       # $0.25 input, $2.00 output - gpt-5 architecture
+            # Premium models
             "gpt-4o",
             "gpt-4-turbo",
-            "gpt-3.5-turbo",
         ]
         return [m for m in models if m.startswith(prefix)]
 
