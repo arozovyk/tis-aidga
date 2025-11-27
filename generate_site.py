@@ -603,6 +603,7 @@ class SiteGenerator:
                                         <th>Avg Alarms</th>
                                         <th>Func Coverage</th>
                                         <th>Stmt Coverage</th>
+                                        <th>Semantic Coverage</th>
                                     </tr>
                                 </thead>
                                 <tbody>
@@ -700,6 +701,7 @@ class SiteGenerator:
                     <td>{s.avg_alarm_count:.2f}</td>
                     <td>{s.avg_function_coverage}</td>
                     <td>{s.avg_stmt_coverage}</td>
+                    <td>{s.avg_semantic_coverage}</td>
                 </tr>""")
         return "".join(rows)
 
@@ -811,9 +813,9 @@ class SiteGenerator:
                    data-driver="{i}" data-model="{escape(driver.model)}">
                     <div class="d-flex justify-content-between align-items-center">
                         <span><i class="bi bi-file-code"></i> {escape(driver.filename)}</span>
-                        <small class="text-muted">{driver.size} bytes</small>
+                        <small class="text-info">{driver.size} bytes</small>
                     </div>
-                    <small class="text-muted">Model: {escape(driver.model)} | Run: {driver.run_number}</small>
+                    <small class="text-secondary">Model: {escape(driver.model)} | Run: {driver.run_number}</small>
                 </a>""")
 
             hidden = "" if i == 0 else "d-none"
@@ -882,7 +884,7 @@ class SiteGenerator:
                         <span><i class="bi bi-folder"></i> {escape(log.name)}</span>
                         {status_badge}
                     </div>
-                    <small class="text-muted">{len(log.files)} files</small>
+                    <small class="text-info">{len(log.files)} files</small>
                 </a>""")
 
             hidden = "" if i == 0 else "d-none"
