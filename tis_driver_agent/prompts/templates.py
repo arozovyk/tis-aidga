@@ -46,6 +46,12 @@ The goal is to detect coding errors that may lead to undefined behaviors.
 - Use "generalized" not "random" in comments
 - In the comment, describe why a line is here, but do not comment on things that are not here
 
+### CRITICAL - Header Includes:
+- ONLY include `<tis_builtin.h>` and standard C headers (`<stddef.h>`, `<stdint.h>`, `<string.h>`, etc.)
+- NEVER include project-specific headers (e.g., `<json-c/json.h>`, `"myproject.h"`)
+- All project types MUST be forward-declared in the driver using the skeleton's declarations
+- The driver will be compiled alongside the actual source files, so forward declarations are sufficient
+
 ### Output Format:
 Return ONLY valid C11 code in a ```c block. No explanations outside code comments.
 Do not give your thought process. Write only code in your answer.
@@ -63,10 +69,17 @@ You are fixing a TIS-Analyzer verification driver that failed compilation.
 {errors}
 
 ## Common Fixes:
-- "incomplete type": Provide full struct definition, not just declaration
-- "undeclared identifier": Add missing declaration or include
+- "incomplete type": Provide full struct definition with all fields, not just forward declaration
+- "undeclared identifier": Add missing forward declaration (do NOT add project header includes)
 - "variable-sized object": Use #define macros for array sizes
 - "unbound function tis_*": Include <tis_builtin.h>
+- "Incompatible declaration" / "not isomorphic": Your type definitions conflict with the actual source. Use opaque pointers (`struct X;`) instead of redefining structs, or ensure your definitions exactly match the source
+
+## CRITICAL Rules:
+- NEVER add project-specific headers (e.g., `<json-c/json.h>`, `"myproject.h"`)
+- ONLY use `<tis_builtin.h>` and standard C headers
+- Use forward declarations (`struct X;`) for types you don't need to access internals of
+- The driver is compiled with the actual source files, so forward declarations are sufficient
 
 ## Instructions:
 Fix the compilation errors while maintaining the driver's purpose.
@@ -131,9 +144,13 @@ def build_generation_prompt(
         skeleton_section = f"""### Driver Skeleton:
 
 The following skeleton has been automatically generated using `tis-analyzer -drivergen-skeleton {function_name}`.
-It contains all necessary type definitions, forward declarations, and the driver function signature.
+It contains all necessary type definitions and forward declarations.
 
-**IMPORTANT**: You must use this skeleton as the basis for your driver. Fill in the body of the `__tis_{function_name}_driver(void)` function with appropriate parameter initialization and function calls. Do not modify the type definitions or function declarations unless absolutely necessary.
+**CRITICAL**:
+- Use this skeleton as the basis for your driver
+- The skeleton provides all necessary forward declarations - do NOT add project header includes
+- Fill in the body of the `__tis_{function_name}_driver(void)` function with parameter initialization and function calls
+- Do not redefine types that are already forward-declared in the skeleton
 
 ```c
 {skeleton_code}
