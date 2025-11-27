@@ -10,7 +10,24 @@ from dotenv import load_dotenv
 
 from .config import AgentConfig, ModelConfig, TISConfig, SSHConfig
 from .models.openai_adapter import OpenAIAdapter
+from .models.ollama_adapter import OllamaAdapter
 from .tis.remote import RemoteTISRunner
+
+# Known Ollama model prefixes (for auto-detection)
+OLLAMA_MODELS = [
+    "llama",
+    "mistral",
+    "gemma",
+    "codellama",
+    "deepseek",
+    "qwen",
+    "phi",
+    "vicuna",
+    "orca",
+    "neural-chat",
+    "starling",
+    "dolphin",
+]
 from .graph import create_workflow
 from .utils.project_manager import ProjectManager
 from .utils.context_detector import (
@@ -58,17 +75,55 @@ class ModelCompleter:
 
     def __call__(self, prefix, parsed_args, **kwargs):
         models = [
-            # Cheap models (<$0.40/1M input)
+            # OpenAI - Cheap models (<$0.40/1M input)
             "gpt-4o-mini",      # $0.15 input, $0.60 output - proven, widely used
             "gpt-4.1-mini",     # $0.40 input, $1.60 output - newer, improved
             "gpt-4.1-nano",     # $0.10 input, $0.40 output - very cheap
             "gpt-5-nano",       # $0.05 input, $0.40 output - cheapest
             "gpt-5-mini",       # $0.25 input, $2.00 output - gpt-5 architecture
-            # Premium models
+            # OpenAI - Premium models
             "gpt-4o",
             "gpt-4-turbo",
+            # Ollama - Local models (free)
+            "llama3.2:latest",
+            "llama3.2:1b-instruct-fp16",
+            "mistral:7b-instruct",
+            "gemma3:12b-it-q4_K_M",
+            "codellama:latest",
+            "deepseek-coder:latest",
         ]
         return [m for m in models if m.startswith(prefix)]
+
+
+def is_ollama_model(model: str) -> bool:
+    """Check if a model should use Ollama adapter."""
+    model_lower = model.lower()
+    for prefix in OLLAMA_MODELS:
+        if model_lower.startswith(prefix):
+            return True
+    return False
+
+
+def create_model_adapter(model: str, api_key: str = None, temperature: float = 0.7, ollama_url: str = None):
+    """Create the appropriate model adapter based on model name."""
+    if is_ollama_model(model):
+        adapter = OllamaAdapter(
+            model=model,
+            base_url=ollama_url or "http://localhost:11434",
+            temperature=temperature,
+        )
+        # Verify Ollama is available
+        if not adapter.is_available():
+            print(f"Warning: Ollama model '{model}' may not be available.")
+            print("Make sure Ollama is running: `ollama serve`")
+            print(f"And the model is pulled: `ollama pull {model}`")
+        return adapter
+    else:
+        return OpenAIAdapter(
+            model=model,
+            api_key=api_key,
+            temperature=temperature,
+        )
 
 
 def cmd_init(args):
@@ -306,11 +361,12 @@ def cmd_gen(args):
         # Extract function signature
         function_signature = extract_function_signature(source_content, args.function)
 
-        # Create model adapter
-        model_adapter = OpenAIAdapter(
+        # Create model adapter (auto-detects OpenAI vs Ollama)
+        model_adapter = create_model_adapter(
             model=config.model.model,
             api_key=config.model.api_key,
             temperature=config.model.temperature,
+            ollama_url=getattr(args, 'ollama_url', None),
         )
 
         # Create workflow
@@ -533,6 +589,11 @@ def main():
         choices=["function", "source", "matching", "full"],
         default="function",
         help="Context mode: function (extracted function only), source (full source file), matching (source + matching header), full (all headers). Default: function",
+    )
+    gen_parser.add_argument(
+        "--ollama-url",
+        default="http://localhost:11434",
+        help="Ollama server URL (default: http://localhost:11434)",
     )
     gen_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose output"
