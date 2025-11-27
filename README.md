@@ -10,7 +10,7 @@ TIS-AIDGA is a CLI tool that uses LLMs to automatically generate verification dr
 
 - Python 3.10+
 - Access to a remote machine with TrustInSoft Analyzer installed (SSH)
-- OpenAI API key
+- OpenAI API key **or** Ollama running locally (for local LLM models)
 
 ## Installation
 
@@ -172,7 +172,14 @@ tisaidga gen <project> <filename> <function> [options]
   --model             LLM model (default: gpt-4o-mini)
   --max-iterations    Max refinement iterations (default: 5)
   --log, -l           Path to detailed workflow log file
+  --ollama-url        Ollama server URL (default: http://localhost:11434)
   --verbose, -v       Verbose output
+
+Supported models:
+  OpenAI:  gpt-4o-mini, gpt-4o, gpt-4.1-mini, gpt-4.1-nano, gpt-5-mini, gpt-5-nano
+  Ollama:  llama3.2, mistral, codellama, deepseek-coder, gemma, phi, qwen, etc.
+
+  Models are auto-detected: names starting with llama, mistral, gemma, etc. use Ollama.
 ```
 
 ## Configuration Priority
@@ -228,12 +235,14 @@ tis_driver_agent/
 ├── workflow_logger.py  # Detailed workflow logging
 ├── nodes/              # LangGraph nodes
 │   ├── planner.py
+│   ├── skeleton.py     # TIS skeleton extraction
 │   ├── router.py
 │   ├── generator.py
 │   ├── validator.py
 │   └── refiner.py
 ├── models/             # LLM adapters
-│   └── openai_adapter.py
+│   ├── openai_adapter.py
+│   └── ollama_adapter.py
 ├── tis/                # TIS runner (local/remote)
 │   ├── base.py
 │   ├── local.py
