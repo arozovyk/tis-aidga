@@ -32,8 +32,6 @@ def skeleton_node(state: DriverState, tis_runner) -> DriverState:
             error_msg = f"Failed to generate skeleton for {function_name}"
             if logger:
                 logger.log_message(f"⚠️  {error_msg}")
-            if structured_logger:
-                structured_logger.log_error(f"[skeleton] {error_msg}")
 
             return {
                 **state,
@@ -63,8 +61,6 @@ def skeleton_node(state: DriverState, tis_runner) -> DriverState:
         error_msg = f"Skeleton generation failed: {str(e)}"
         if logger:
             logger.log_message(f"⚠️  {error_msg}")
-        if structured_logger:
-            structured_logger.log_error(f"[skeleton] {error_msg}")
 
         return {
             **state,
