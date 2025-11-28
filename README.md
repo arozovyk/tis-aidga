@@ -111,13 +111,25 @@ tisaidga gen <project> <filename> <function> [options]
   --output, -o        Output file path
   --model             LLM model (default: gpt-4o-mini)
   --max-iterations    Max refinement iterations (default: 5)
-  --context           Context level: function, file, or project (default: function)
-  --with-logs         Enable detailed logging to logs/ directory
+  --context           Context mode (default: function):
+                        function  - extracted function only
+                        source    - full source file
+                        matching  - source + matching header
+                        full      - all headers
+                        ast       - use AST index for factory functions
+  --log, -l           Path to log file for detailed workflow logging
+  --with-logs         Enable structured logging to logs/log_<timestamp>/
   --ollama-url        Ollama server URL (default: http://localhost:11434)
   --verbose, -v       Verbose output
 
+tisaidga context <project> <function> [options]
+  --verbose, -v       Show full context (debug command)
+
+tisaidga reindex <project>
+  Rebuild AST index for a project
+
 Supported models:
-  OpenAI:  gpt-4o-mini, gpt-4o, gpt-4.1-mini, gpt-4.1-nano, gpt-5-mini, gpt-5-nano
+  OpenAI:  gpt-4o-mini, gpt-4o
   Ollama:  llama3.2, mistral, codellama, deepseek-coder, gemma, phi, qwen, etc.
 
   Models are auto-detected: names starting with llama, mistral, gemma, etc. use Ollama.
@@ -126,13 +138,14 @@ Supported models:
 ## How It Works
 
 1. **Parse** - Reads `compile_commands.json` to extract source files, include paths, and defines
-2. **Plan** - Analyzes the target function and prepares generation context
-3. **Generate** - Uses LLM to generate a TIS verification driver
-4. **Validate** - Two-stage validation:
+2. **Index** - Builds AST index of function declarations to detect factory functions and types
+3. **Plan** - Analyzes the target function and prepares generation context
+4. **Generate** - Uses LLM to generate a TIS verification driver
+5. **Validate** - Two-stage validation:
    - Stage 1: Local `cc` syntax check
    - Stage 2: TIS Analyzer compilation
-5. **Refine** - If validation fails, feeds errors back to LLM for correction
-6. **Output** - Writes the final validated driver to disk
+6. **Refine** - If validation fails, feeds errors back to LLM for correction
+7. **Output** - Writes the final validated driver to disk
 
 ## Project Structure
 
@@ -286,6 +299,7 @@ tis_driver_agent/
 ├── graph.py            # LangGraph workflow
 ├── cc.py               # Local C compiler validation
 ├── workflow_logger.py  # Detailed workflow logging
+├── builtins.c          # TIS builtins implementation
 ├── nodes/              # LangGraph nodes
 │   ├── planner.py
 │   ├── skeleton.py     # TIS skeleton extraction
@@ -304,8 +318,16 @@ tis_driver_agent/
 │   ├── compilation_db.py
 │   ├── context_detector.py
 │   └── project_manager.py
-└── prompts/            # LLM prompt templates
-    └── templates.py
+├── prompts/            # LLM prompt templates
+│   └── templates.py
+├── stubs/              # TIS header stubs
+│   └── tis_builtin.h
+└── context/            # AST indexing for context assembly
+    ├── parser.py       # C function declaration parser
+    ├── index.py        # AST index builder
+    ├── lookup.py       # Factory function lookup
+    ├── assembler.py    # Context assembly from index
+    └── models.py       # Data models for index
 ```
 
 ## License
