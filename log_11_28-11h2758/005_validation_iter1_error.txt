@@ -1,0 +1,33 @@
+=== TIS Compilation Errors ===
+
+json_object.c:536:[value] Error EAV16: Calling undefined function lh_kchar_table_new that returns a pointer type.
+
+[value] Error: Degeneration occurred:
+
+Output:
+[kernel] [1/6] Parsing TIS_KERNEL_SHARE/libc/__fc_builtin_for_normalization.i (no preprocessing)
+[kernel] [2/6] Parsing TIS_KERNEL_SHARE/libc/tis_runtime.c (with preprocessing)
+[kernel] [3/6] Parsing TIS_KERNEL_SHARE/__tis_mkfs.c (with preprocessing)
+[kernel] [4/6] Parsing TIS_KERNEL_SHARE/mkfs_empty_filesystem.c (with preprocessing)
+[kernel] [5/6] Parsing __tis_driver_json_object_equal.c (with preprocessing)
+[kernel] [6/6] Parsing json_object.c (with preprocessing)
+[kernel] Successfully parsed 2 files (+4 runtime files)
+[value] Analyzing a complete application starting at __tis_json_object_equal_driver
+[value] Computing initial state
+[value] Initial state computed
+[value] The Analysis can be stopped by hitting Ctrl-C
+linkhash.h:209:[kernel] warning: Neither code nor specification for function lh_kchar_table_new, generating default assigns from the prototype
+[value] using specification for function lh_kchar_table_new
+[from] Non-terminating function json_object_new_object (no dependencies)
+[from] Non-terminating function __tis_json_object_equal_driver (no dependencies)
+json_object.c:536:[value] Error EAV16: Calling undefined function lh_kchar_table_new that returns a pointer type.
+                     Please provide a function body.
+[value] Error: Degeneration occurred:
+               results are not correct for lines of code that can be reached from the degeneration point.
+[info] Saved JSON results in 'tis_info_results.json'
+[time] Performance summary:
+  Parsing: 1.082s
+  Value Analysis: 0.014s
+  
+  Total time: 0h00m01s (= 1.096 seconds)
+  Max memory used: 135.7MB (= 135725056 bytes)

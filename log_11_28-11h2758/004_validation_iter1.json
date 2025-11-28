@@ -1,0 +1,190 @@
+{
+  "step": "validation",
+  "iteration": 1,
+  "timestamp": "2025-11-28T11:28:19.892071",
+  "is_valid": false,
+  "cc_compile": {
+    "success": true,
+    "command": "(CC check disabled)",
+    "exit_code": 0,
+    "errors": [],
+    "stdout": "",
+    "stderr": ""
+  },
+  "tis_compile": {
+    "success": false,
+    "command": "cd /home/arozovyk/work/json-c && tis-analyzer __tis_driver_json_object_equal.c /home/arozovyk/work/json-c/json_object.c -val -main __tis_json_object_equal_driver -machdep gcc_x86_64 -info-json-results tis_info_results.json",
+    "exit_code": 0,
+    "errors": [
+      "json_object.c:536:[value] Error EAV16: Calling undefined function lh_kchar_table_new that returns a pointer type.",
+      "[value] Error: Degeneration occurred:"
+    ],
+    "stdout": "[kernel] [1/6] Parsing TIS_KERNEL_SHARE/libc/__fc_builtin_for_normalization.i (no preprocessing)\n[kernel] [2/6] Parsing TIS_KERNEL_SHARE/libc/tis_runtime.c (with preprocessing)\n[kernel] [3/6] Parsing TIS_KERNEL_SHARE/__tis_mkfs.c (with preprocessing)\n[kernel] [4/6] Parsing TIS_KERNEL_SHARE/mkfs_empty_filesystem.c (with preprocessing)\n[kernel] [5/6] Parsing __tis_driver_json_object_equal.c (with preprocessing)\n[kernel] [6/6] Parsing json_object.c (with preprocessing)\n[kernel] Successfully parsed 2 files (+4 runtime files)\n[value] Analyzing a complete application starting at __tis_json_object_equal_driver\n[value] Computing initial state\n[value] Initial state computed\n[value] The Analysis can be stopped by hitting Ctrl-C\nlinkhash.h:209:[kernel] warning: Neither code nor specification for function lh_kchar_table_new, generating default assigns from the prototype\n[value] using specification for function lh_kchar_table_new\n[from] Non-terminating function json_object_new_object (no dependencies)\n[from] Non-terminating function __tis_json_object_equal_driver (no dependencies)\njson_object.c:536:[value] Error EAV16: Calling undefined function lh_kchar_table_new that returns a pointer type.\n                     Please provide a function body.\n[value] Error: Degeneration occurred:\n               results are not correct for lines of code that can be reached from the degeneration point.\n[info] Saved JSON results in 'tis_info_results.json'\n[time] Performance summary:\n  Parsing: 1.082s\n  Value Analysis: 0.014s\n  \n  Total time: 0h00m01s (= 1.096 seconds)\n  Max memory used: 135.7MB (= 135725056 bytes)\n",
+    "stderr": "",
+    "info_json": {
+      "computation": {
+        "type": "error",
+        "status": "OK"
+      },
+      "undefined_functions": {
+        "type": "error",
+        "status": "NOT OK",
+        "list": [
+          {
+            "file": "linkhash.h",
+            "line": 209,
+            "function": "lh_kchar_table_new"
+          }
+        ]
+      },
+      "degeneration": {
+        "type": "error",
+        "status": "NOT OK",
+        "reason": "pointer library function",
+        "program_point": {
+          "file": "json_object.c",
+          "line": 536,
+          "function": "json_object_new_object",
+          "function_start_line": 530,
+          "function_end_line": 544,
+          "statement_kind": "function call",
+          "statement_number": 5,
+          "direct_call": true,
+          "called_function": "lh_kchar_table_new"
+        }
+      },
+      "non_terminating": {
+        "type": "to verify",
+        "status": "OK"
+      },
+      "messages": {
+        "type": "to verify",
+        "status": "NOT OK",
+        "list": [
+          {
+            "location": {
+              "file": "json_object.c",
+              "line": 536
+            },
+            "plugin": "value",
+            "kind": "user error",
+            "message": "Calling undefined function lh_kchar_table_new that returns a pointer type.\nPlease provide a function body."
+          }
+        ]
+      },
+      "bypassed_parsing_errors": {
+        "type": "to verify",
+        "status": "OK"
+      },
+      "alarms": {
+        "type": "error",
+        "status": "OK"
+      },
+      "libc_alarms": {
+        "type": "informative",
+        "status": "OK"
+      },
+      "non_determinism": {
+        "type": "error",
+        "status": "OK"
+      },
+      "hypotheses": {
+        "type": "to verify",
+        "status": "NOT OK",
+        "list": [
+          {
+            "kind": "assigns",
+            "status": "unknown",
+            "more_information": "ensures of -val-use-spec function",
+            "file": "linkhash.h",
+            "line": 209,
+            "function": "lh_kchar_table_new"
+          },
+          {
+            "kind": "from",
+            "name": "(line 209)",
+            "status": "unknown",
+            "more_information": "ensures of -val-use-spec function",
+            "file": "linkhash.h",
+            "line": 209,
+            "function": "lh_kchar_table_new"
+          }
+        ]
+      },
+      "no_body_but_spec": {
+        "type": "to verify",
+        "status": "OK"
+      },
+      "body_but_use_spec": {
+        "type": "informative",
+        "status": "OK"
+      },
+      "external_variables": {
+        "type": "informative",
+        "status": "OK"
+      },
+      "assembly": {
+        "type": "informative",
+        "status": "OK"
+      },
+      "builtins": {
+        "type": "informative",
+        "status": "NOT OK",
+        "list": [
+          "malloc"
+        ]
+      },
+      "useless_files": {
+        "type": "to verify",
+        "status": "OK"
+      },
+      "coverage": {
+        "type": "informative",
+        "function_coverage": "4%",
+        "total_statements_coverage": "2%",
+        "semantic_statements_coverage": "23%"
+      },
+      "precision": {
+        "type": "informative",
+        "status": "NOT OK",
+        "max_slevel": 2,
+        "reaching_slevel_stmts": 1
+      },
+      "time": {
+        "type": "informative",
+        "total_time": "1.096",
+        "value_analysis_time": "0.014",
+        "parsing_time": "1.082"
+      },
+      "target": {
+        "type": "informative",
+        "entry_point": "__tis_json_object_equal_driver",
+        "entry_point_function": {
+          "function": "__tis_json_object_equal_driver",
+          "file": "__tis_driver_json_object_equal.c",
+          "function_start_line": 28,
+          "function_end_line": 91
+        },
+        "architecture": "gcc AMD64",
+        "endianness": "little endian"
+      },
+      "entry_point_return": {
+        "type": "informative",
+        "reachable": false
+      },
+      "exit_function": {
+        "type": "informative",
+        "reachable": false
+      },
+      "val_profile": "analyzer",
+      "value_results": true,
+      "memory_usage": {
+        "words": 16965632,
+        "bytes": 135725056,
+        "kbytes": 135725,
+        "Mbytes": 135,
+        "Gbytes": 0
+      }
+    }
+  }
+}
