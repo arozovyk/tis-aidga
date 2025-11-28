@@ -2,8 +2,211 @@
 
 from typing import List, Dict
 
+TIS_BUILTIN_HEADER = """
+/**************************************************************************/
+/*                                                                        */
+/*  This file is part of TrustInSoft Kernel.                              */
+/*                                                                        */
+/*    Copyright (C) 2016-2025 TrustInSoft                                 */
+/*                                                                        */
+/*  TrustInSoft Kernel is released under GPLv2                            */
+/*                                                                        */
+/**************************************************************************/
+
+#ifndef __TIS_DRIVERGEN_BUILTIN_H
+#define __TIS_DRIVERGEN_BUILTIN_H
+
+__BEGIN_DECLS
+
+extern _Thread_local int tis_entropy_source __attribute__((__TIS_MODEL__));
+
+/**
+ * Construct an abstract value representing any `int` value between `__min`
+ * and `__max` (inclusive).
+ *
+ * @param __min lowest value in returned interval or set
+ * @param __max highest value in returned interval or set
+ * @return an abstract value representing an interval or set of possible
+ *         `int` values
+ */
+int tis_interval(int __min, int __max);
+
+/**
+ * Populate an area of memory starting at address `__p` of size `__l` with
+ * abstract values representing unknown contents.
+ *
+ * @param __p pointer to an area of memory to populate
+ * @param __l size of the area of memory being populated (in bytes)
+ */
+void tis_make_unknown(char *__p, unsigned long __l);
+
+/**
+ * Construct an abstract value representing a nondeterministic choice between
+ * two signed integer values.
+ *
+ * @param __a a possible value
+ * @param __b a possible value
+ * @returns an abstract value representing a set or interval of possible
+ *         `int` values
+ */
+int tis_nondet(int __a, int __b);
+
+/**
+ * Construct an abstract value representing a nondeterministic choice between
+ * two pointers.
+ *
+ * @param __a a pointer to a memory address
+ * @param __b a pointer to a memory address
+ * @returns an abstract value representing a set or interval of possible
+ *         pointers to memory addresses
+ */
+void *tis_nondet_ptr(void *__a, void *__b);
+
+/**
+ * Make an area of memory starting at address `__p` of size `__l`
+ * uninitialized.
+ *
+ * @param __p pointer to an area of memory to make uninitialized
+ * @param __l size of the area of memory being uninitialized (in bytes)
+ */
+void tis_make_uninitialized(char *__p, unsigned long __l);
+
+/**
+ * Construct an abstract value representing any `int` value between `__min`
+ * and `__max` (inclusive) and place each resulting value in a separate state.
+ * Equivalent to `tis_interval` followed by `tis_variable_split`.
+ *
+ * @param __min lowest value in returned interval
+ * @param __max highest value in returned interval
+ * @return an abstract value representing an interval of possible `int` values
+ */
+int tis_interval_split(int __min, int __max);
+
+/**
+ * Construct an abstract value representing any `unsigned char` value between
+ * `__min` and `__max` (inclusive).
+ */
+unsigned char tis_unsigned_char_interval(unsigned char __min, unsigned char __max);
+
+/**
+ * Construct an abstract value representing any `char` value between
+ * `__min` and `__max` (inclusive).
+ */
+char tis_char_interval(char __min, char __max);
+
+/**
+ * Construct an abstract value representing any `unsigned short` value between
+ * `__min` and `__max` (inclusive).
+ */
+unsigned short tis_unsigned_short_interval(unsigned short __min, unsigned short __max);
+
+/**
+ * Construct an abstract value representing any `short` value between
+ * `__min` and `__max` (inclusive).
+ */
+short tis_short_interval(short __min, short __max);
+
+/**
+ * Construct an abstract value representing any `unsigned int` value between
+ * `__min` and `__max` (inclusive).
+ */
+unsigned int tis_unsigned_int_interval(unsigned int __min, unsigned int __max);
+
+/**
+ * Construct an abstract value representing any `int` value between `__min`
+ * and `__max` (inclusive). Alias: tis_interval
+ */
+int tis_int_interval(int __min, int __max);
+
+/**
+ * Construct an abstract value representing any `unsigned long` value between
+ * `__min` and `__max` (inclusive).
+ */
+unsigned long tis_unsigned_long_interval(unsigned long __min, unsigned long __max);
+
+/**
+ * Construct an abstract value representing any `long` value between `__min`
+ * and `__max` (inclusive).
+ */
+long tis_long_interval(long __min, long __max);
+
+/**
+ * Construct an abstract value representing any `unsigned long long` value between
+ * `__min` and `__max` (inclusive).
+ */
+unsigned long long tis_unsigned_long_long_interval(unsigned long long __min, unsigned long long __max);
+
+/**
+ * Construct an abstract value representing any `long long` value between
+ * `__min` and `__max` (inclusive).
+ */
+long long tis_long_long_interval(long long __min, long long __max);
+
+/**
+ * Construct an abstract value representing any `float` value between `__min`
+ * and `__max` (inclusive).
+ */
+float tis_float_interval(float __min, float __max);
+
+/**
+ * Construct an abstract value representing any `double` value between `__min`
+ * and `__max` (inclusive).
+ */
+double tis_double_interval(double __min, double __max);
+
+/**
+ * Allocate `__size` bytes and returns a pointer to the allocated memory.
+ *
+ * @param __size size of the allocated memory in bytes.
+ * @return pointer to an allocated area of memory or `NULL`.
+ */
+void *tis_alloc(unsigned long __size);
+
+/**
+ * Allocate `__size` bytes and returns a pointer to the allocated memory.
+ * Never return `NULL`.
+ *
+ * @param __size size of the allocated memory in bytes.
+ * @return pointer to an allocated area of memory (never `NULL`).
+ */
+void *tis_alloc_safe(unsigned long __size);
+
+/**
+ * Allocate `__size` bytes and returns a pointer to the allocated memory.
+ * Never return `NULL`.
+ *
+ * @param __size size of the allocated memory in bytes.
+ * @return pointer to an allocated area of memory (never `NULL`).
+ */
+void *tis_alloc_non_null(unsigned long __size);
+
+/**
+ * Allocate zeroed memory for an array.
+ *
+ * @param __nmemb number of elements
+ * @param __size size of each element in bytes.
+ * @return pointer to an allocated area of memory or `NULL`.
+ */
+void *tis_calloc(unsigned long __nmemb, unsigned long __size);
+
+/**
+ * Split the state of the analyzer so that each possible value contained at
+ * memory location of size `__s` at address `__p` is placed in a separate state
+ * (up to `__limit` states).
+ *
+ * @param __p pointer to an area of memory by which to split the state
+ * @param __s size of the area of memory by which to split the state
+ * @param __limit upper bound on the number of created states
+ */
+void tis_variable_split(void *__p, unsigned long __s, int __limit);
+
+__END_DECLS
+
+#endif /* tis_builtin.h */
+"""
+
 DRIVER_GENERATION_TEMPLATE = """
-You are an expert C programmer specializing in TrustInSoft Analyzer verification drivers.
+You are an expert C programmer specializing in writing randomized unit tests.
 
 ## Context
 
@@ -19,47 +222,46 @@ Function to test: {function_name}
 
 ## Requirements
 
-Write a strictly conformant C11 verification driver for {function_name}.
+Write a C11 verification driver for {function_name}.
 The goal is to detect coding errors that may lead to undefined behaviors.
 
 ### Driver Structure:
 1. Header comment: `// TIS-Analyzer verification driver for function {function_name}. It has been generated by tis-ai with model {model}.`
 2. Include `<tis_builtin.h>`
-3. All required type definitions (complete, not just declarations)
-4. Function declaration as `extern`
-5. Driver function: `__tis_{function_name}_driver(void)`
-6. Main function calling all test functions in order
+3. Function declaration as `extern`
+4. Driver function: `__tis_{function_name}_driver(void)`
+5. Main function calling all driver functions in order
 
-### TIS Builtin Functions (use ONLY these):
-- `void tis_make_unknown(char *addr, unsigned long len)` - Initialize memory with generalized values
-- `int tis_interval(int min, int max)` - Generalized integer in range [min, max]
-- `void *tis_alloc(size_t size)` - Allocate raw memory ONLY for primitive types/arrays (NOT for complex structs with constructors)
-- `void *tis_nondet_ptr(void *p1, void *p2)` - Return either p1 or p2
+### TIS Builtin Functions:
 
-### Object Creation Rules:
-- **If constructor functions are provided in the context (e.g., `foo_new()`, `foo_create()`)**: USE THEM to create objects. Declare them as `extern` in your driver.
-- **If NO constructor is provided**: Use `tis_alloc()` with manual field initialization
-- **NEVER manually define struct contents when constructors are available** - use opaque forward declarations (`struct foo;`)
+A "generalized" value means a random value within a specified range. For example, a generalized value between 0 and 10 represents any random value in the range [0, 10].
+
+Here is the full `tis_builtin.h` header with all available functions:
+
+```c
+{tis_builtin_header}
+```
+
+### Object Creation:
+- You can create objects on the stack, with `tis_alloc()`, or using constructor functions from the API
+- If constructor functions are provided in the context (e.g., `foo_new()`, `foo_create()`), prefer using them. Declare them as `extern` in your driver
+- When using constructors, use opaque forward declarations (`struct foo;`) instead of defining struct contents
 
 ### Rules:
 - Test NULL pointers using `tis_nondet_ptr(valid_ptr, NULL)` unless documented otherwise
-- Array lengths MUST use #define macros, never tis_interval for sizes
-- All strings MUST be null-terminated
-- Never test function effects, only exercise code paths
-- Do not insert code that is not useful to call {function_name}
+- Array lengths should use #define macros instead of tis_interval for sizes
+- All strings must be null-terminated
+- Focus on exercising code paths rather than testing function effects
 - Initialize all struct fields before use
-- Use "generalized" not "random" in comments
-- In the comment, describe why a line is here, but do not comment on things that are not here
+- Use "generalized" instead of "random" in comments
 
-### CRITICAL - Header Includes:
-- ONLY include `<tis_builtin.h>` and standard C headers (`<stddef.h>`, `<stdint.h>`, `<string.h>`, etc.)
-- NEVER include project-specific headers (e.g., `<json-c/json.h>`, `"myproject.h"`)
-- All project types MUST be forward-declared in the driver using the skeleton's declarations
-- The driver will be compiled alongside the actual source files, so forward declarations are sufficient
+### Header Includes:
+- Include `<tis_builtin.h>` and standard C headers as needed (`<stddef.h>`, `<stdint.h>`, `<string.h>`, etc.)
+- You may include project headers if they are provided in the context
+- Alternatively, use forward declarations for types you don't need to access internals of
 
 ### Output Format:
-Return ONLY valid C11 code in a ```c block. No explanations outside code comments.
-Do not give your thought process. Write only code in your answer.
+Return ONLY C11 code in a ```c block. No explanations outside code comments.
 """
 
 REFINER_TEMPLATE = """
@@ -170,6 +372,7 @@ def build_generation_prompt(
         include_paths=includes,
         model=model,
         skeleton_section=skeleton_section,
+        tis_builtin_header=TIS_BUILTIN_HEADER,
     )
 
 

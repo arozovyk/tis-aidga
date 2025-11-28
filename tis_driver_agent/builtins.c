@@ -783,3 +783,4 @@ void tis_init_type(const char * __type, void * __ptr, unsigned long __depth,
                    unsigned long __width, enum tis_valid_pointer __valid_pointers) __TIS_THROW;
 
 #endif /* tis_builtin.h */
+
