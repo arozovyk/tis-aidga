@@ -48,6 +48,53 @@ from .workflow_logger import (
 load_dotenv()
 
 
+def read_file_local_first(path: str, tis_runner=None, include_paths=None, verbose=False):
+    """
+    Read a file, trying local first then remote.
+
+    Args:
+        path: File path to read
+        tis_runner: Optional TIS runner for remote reading
+        include_paths: Include paths to search for headers
+        verbose: Print debug info
+
+    Returns:
+        File content or None if not found
+    """
+    # Try local first
+    if os.path.exists(path):
+        try:
+            with open(path, "r") as f:
+                return f.read()
+        except Exception:
+            pass
+
+    # If it's a header name (not a full path), search in include paths
+    if include_paths and not os.path.isabs(path):
+        for inc_path in include_paths:
+            full_path = os.path.join(inc_path, path)
+            if os.path.exists(full_path):
+                try:
+                    with open(full_path, "r") as f:
+                        return f.read()
+                except Exception:
+                    pass
+
+    # Try remote via TIS runner
+    if tis_runner:
+        content = tis_runner.read_remote_file(path)
+        if content:
+            return content
+
+        # Try finding header in include paths remotely
+        if include_paths and not os.path.isabs(path):
+            header_path = tis_runner.find_header_files(include_paths, path)
+            if header_path:
+                return tis_runner.read_remote_file(header_path)
+
+    return None
+
+
 # Custom completers for argcomplete
 class ProjectCompleter:
     """Completer for project names."""
@@ -136,13 +183,14 @@ def cmd_init(args):
         print(f"Error: Compilation database not found: {args.compilation_db}")
         sys.exit(1)
 
-    # Initialize project
-    project_name = pm.init_project(
+    # Initialize project (now includes indexing)
+    project_name, index_stats = pm.init_project(
         compilation_db_path=args.compilation_db,
         project_name=args.name,
         ssh_host=args.ssh_host or "",
         ssh_user=args.ssh_user or "",
         tis_env_script=args.tis_env_script or "",
+        skip_index=getattr(args, 'no_index', False),
     )
 
     print(f"Project '{project_name}' initialized successfully!")
@@ -153,6 +201,20 @@ def cmd_init(args):
 
     print(f"\nRemote work dir: {config.remote_work_dir}")
     print(f"Files indexed: {len(files)}")
+
+    # Show index stats
+    if index_stats.get("functions", 0) > 0:
+        print(f"\nAST Index:")
+        print(f"  Functions: {index_stats['functions']}")
+        print(f"  Types: {index_stats['types']}")
+        print(f"  Built in: {index_stats['build_time']:.1f}s")
+    elif getattr(args, 'no_index', False):
+        print("\nAST Index: skipped (--no-index)")
+    elif index_stats.get("files", 0) == 0 and len(files) > 0:
+        print("\nAST Index: no files accessible (source files are remote)")
+        print("  Run 'tisaidga reindex' after syncing files locally")
+    else:
+        print("\nAST Index: not available")
 
     if args.verbose:
         print("\nFiles:")
@@ -185,6 +247,16 @@ def cmd_list(args):
                 print(f"    Path: {f.path}")
                 if f.includes:
                     print(f"    Includes: {', '.join(f.includes[:3])}")
+
+        # Show index status
+        index_stats = pm.get_index_stats(args.project)
+        if index_stats:
+            print(f"\nAST Index:")
+            print(f"  Functions: {index_stats['functions']}")
+            print(f"  Types: {index_stats['types']}")
+            print(f"  Last indexed: {index_stats.get('last_indexed', 'unknown')}")
+        else:
+            print(f"\nAST Index: not built")
     else:
         # List all projects
         projects = pm.list_projects()
@@ -308,11 +380,22 @@ def cmd_gen(args):
             else:
                 print("Connected to remote server")
 
-        # Fetch source file content
-        source_content = tis_runner.read_remote_file(file_info.path)
+        # Fetch source file content - prefer local if available
+        source_content = read_file_local_first(
+            file_info.path,
+            tis_runner=tis_runner,
+            include_paths=file_info.includes,
+            verbose=args.verbose,
+        )
+
         if not source_content:
             print(f"Error: Could not read source file: {file_info.path}")
+            print(f"  File does not exist locally and could not be read remotely.")
             sys.exit(1)
+
+        if args.verbose:
+            local_exists = os.path.exists(file_info.path)
+            print(f"Read source file {'locally' if local_exists else 'remotely'}: {file_info.path}")
 
         # Build context based on --context mode
         context_files = []
@@ -345,13 +428,16 @@ def cmd_gen(args):
             if args.verbose:
                 print(f"Context mode: matching (looking for {matching_header})")
 
-            header_path = tis_runner.find_header_files(file_info.includes, matching_header)
-            if header_path:
-                header_content = tis_runner.read_remote_file(header_path)
-                if header_content:
-                    context_files.append({"name": matching_header, "content": header_content})
-                    if args.verbose:
-                        print(f"  Added matching header: {matching_header}")
+            header_content = read_file_local_first(
+                matching_header,
+                tis_runner=tis_runner,
+                include_paths=file_info.includes,
+                verbose=args.verbose,
+            )
+            if header_content:
+                context_files.append({"name": matching_header, "content": header_content})
+                if args.verbose:
+                    print(f"  Added matching header: {matching_header}")
             elif args.verbose:
                 print(f"  No matching header found")
 
@@ -363,13 +449,46 @@ def cmd_gen(args):
                 print(f"Context mode: full ({len(includes)} includes found)")
 
             for inc in includes:
-                header_path = tis_runner.find_header_files(file_info.includes, inc)
-                if header_path:
-                    header_content = tis_runner.read_remote_file(header_path)
-                    if header_content:
-                        context_files.append({"name": inc, "content": header_content})
-                        if args.verbose:
-                            print(f"  Added header: {inc}")
+                header_content = read_file_local_first(
+                    inc,
+                    tis_runner=tis_runner,
+                    include_paths=file_info.includes,
+                    verbose=args.verbose,
+                )
+                if header_content:
+                    context_files.append({"name": inc, "content": header_content})
+                    if args.verbose:
+                        print(f"  Added header: {inc}")
+
+        elif args.context == "ast":
+            # Use AST index to find factory functions and type definitions
+            from .context.assembler import assemble_context, get_context_summary
+
+            index_path = pm.get_index_path(args.project)
+            if not os.path.exists(index_path):
+                print(f"Error: AST index not found. Run 'tisaidga reindex {args.project}' first.")
+                sys.exit(1)
+
+            ast_context = assemble_context(index_path, args.function)
+            if ast_context:
+                context_files.append({"name": "AST Context", "content": ast_context})
+                if args.verbose:
+                    summary = get_context_summary(index_path, args.function)
+                    print(f"Context mode: ast")
+                    print(f"  Target: {summary.get('target', 'N/A')}")
+                    print(f"  Factories: {summary.get('factory_count', 0)}")
+                    print(f"  Types: {summary.get('type_count', 0)}")
+            else:
+                # Fallback to function extraction
+                func_code = extract_function(source_content, args.function)
+                if func_code:
+                    context_files.append({"name": f"{args.function}()", "content": func_code})
+                    if args.verbose:
+                        print(f"Context mode: ast (no AST context found, using function extraction)")
+                else:
+                    context_files.append({"name": file_info.name, "content": source_content})
+                    if args.verbose:
+                        print(f"Context mode: ast (fallback to full source)")
 
         # Extract function signature
         function_signature = extract_function_signature(source_content, args.function)
@@ -521,6 +640,125 @@ def cmd_gen(args):
             print("Disconnected from remote server")
 
 
+def cmd_context(args):
+    """Show context that would be retrieved for a function."""
+    pm = ProjectManager()
+
+    if not pm.project_exists(args.project):
+        print(f"Error: Project '{args.project}' not found")
+        return 1
+
+    index_path = pm.get_index_path(args.project)
+
+    if not os.path.exists(index_path):
+        print(f"Error: No AST index found for '{args.project}'")
+        print("Run 'tisaidga reindex <project>' to build the index")
+        return 1
+
+    try:
+        from .context.assembler import assemble_context, get_context_summary
+
+        # Show summary
+        summary = get_context_summary(index_path, args.function)
+        if not summary:
+            print(f"Error: Function '{args.function}' not found in index")
+            return 1
+
+        print(f"Function: {summary['function']}")
+        print(f"Parameters:")
+        for ptype, pname in summary['params']:
+            print(f"  - {pname}: {ptype}")
+
+        print(f"\nFactories found:")
+        for type_name, factory_names in summary['factories'].items():
+            print(f"  {type_name}:")
+            for fname in factory_names[:5]:
+                print(f"    - {fname}()")
+            if len(factory_names) > 5:
+                print(f"    ... and {len(factory_names) - 5} more")
+
+        # Show full context if verbose
+        if args.verbose:
+            print("\n" + "=" * 60)
+            print("Full context that would be injected:")
+            print("=" * 60 + "\n")
+
+            context = assemble_context(index_path, args.function)
+            print(context)
+
+    except ImportError as e:
+        print(f"Error: Context module not available ({e})")
+        return 1
+    except Exception as e:
+        print(f"Error: {e}")
+        return 1
+
+    return 0
+
+
+def cmd_reindex(args):
+    """Rebuild AST index for a project."""
+    pm = ProjectManager()
+
+    if not pm.project_exists(args.project):
+        print(f"Error: Project '{args.project}' not found")
+        return 1
+
+    try:
+        from .context.index import build_index
+        from .config import FileInfo as ConfigFileInfo
+        import time
+        import glob
+
+        # Get files from project
+        files = pm.list_files(args.project)
+        config = pm.get_project_config(args.project)
+        index_path = pm.get_index_path(args.project)
+
+        # Collect header files to index (for doxygen comments)
+        files_to_index = list(files)
+        header_paths_seen = set()
+
+        for f in files:
+            src_dir = os.path.dirname(f.path)
+
+            # Look for any .h files in the source directory
+            for h_file in glob.glob(os.path.join(src_dir, '*.h')):
+                if h_file not in header_paths_seen and os.path.exists(h_file):
+                    header_paths_seen.add(h_file)
+                    files_to_index.append(ConfigFileInfo(
+                        name=os.path.basename(h_file),
+                        path=h_file,
+                        directory=src_dir,
+                        includes=[],
+                    ))
+
+        print(f"Reindexing {len(files_to_index)} files ({len(files)} sources + {len(header_paths_seen)} headers)...")
+        start_time = time.time()
+
+        stats = build_index(
+            files=files_to_index,
+            db_path=index_path,
+        )
+
+        elapsed = time.time() - start_time
+
+        print(f"\nIndex rebuilt successfully!")
+        print(f"  Functions: {stats['functions']}")
+        print(f"  Types: {stats['types']}")
+        print(f"  Time: {elapsed:.1f}s")
+
+    except ImportError as e:
+        print(f"Error: tree-sitter not available ({e})")
+        print("Install with: pip install tree-sitter tree-sitter-c")
+        return 1
+    except Exception as e:
+        print(f"Error: {e}")
+        return 1
+
+    return 0
+
+
 def main():
     parser = argparse.ArgumentParser(
         prog="tisaidga",
@@ -548,6 +786,11 @@ def main():
     init_parser.add_argument(
         "--tis-env-script",
         help="Script to source TIS environment",
+    )
+    init_parser.add_argument(
+        "--no-index",
+        action="store_true",
+        help="Skip building AST index (faster init, no context retrieval)",
     )
     init_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose output"
@@ -599,9 +842,9 @@ def main():
     )
     gen_parser.add_argument(
         "--context",
-        choices=["function", "source", "matching", "full"],
+        choices=["function", "source", "matching", "full", "ast"],
         default="function",
-        help="Context mode: function (extracted function only), source (full source file), matching (source + matching header), full (all headers). Default: function",
+        help="Context mode: function (extracted function only), source (full source file), matching (source + matching header), full (all headers), ast (use AST index for factory functions). Default: function",
     )
     gen_parser.add_argument(
         "--ollama-url",
@@ -611,6 +854,28 @@ def main():
     gen_parser.add_argument(
         "--verbose", "-v", action="store_true", help="Verbose output"
     )
+
+    # context command
+    context_parser = subparsers.add_parser(
+        "context", help="Show context for a function (debug)"
+    )
+    context_parser.add_argument(
+        "project", help="Project name"
+    ).completer = ProjectCompleter()
+    context_parser.add_argument(
+        "function", help="Function name"
+    )
+    context_parser.add_argument(
+        "--verbose", "-v", action="store_true", help="Show full context"
+    )
+
+    # reindex command
+    reindex_parser = subparsers.add_parser(
+        "reindex", help="Rebuild AST index for a project"
+    )
+    reindex_parser.add_argument(
+        "project", help="Project name"
+    ).completer = ProjectCompleter()
 
     # Enable argcomplete
     argcomplete.autocomplete(parser)
@@ -623,6 +888,10 @@ def main():
         cmd_list(args)
     elif args.command == "gen":
         cmd_gen(args)
+    elif args.command == "context":
+        cmd_context(args)
+    elif args.command == "reindex":
+        cmd_reindex(args)
     else:
         parser.print_help()
         sys.exit(1)

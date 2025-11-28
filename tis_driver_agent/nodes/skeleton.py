@@ -18,6 +18,9 @@ def skeleton_node(state: DriverState, tis_runner) -> DriverState:
         logger.log_step("SKELETON", state.get("iteration", 0))
 
     structured_logger = get_structured_logger()
+    if not structured_logger:
+        import sys
+        print("DEBUG: structured_logger is None in skeleton!", file=sys.stderr)
 
     try:
         # Run tis-analyzer -drivergen-skeleton
@@ -44,11 +47,15 @@ def skeleton_node(state: DriverState, tis_runner) -> DriverState:
             logger.log_message(f"✓ Generated skeleton ({len(skeleton_code)} chars)")
 
         if structured_logger:
-            structured_logger.log_driver_code(
-                code=skeleton_code,
-                step="skeleton",
-                iteration=state.get("iteration", 0),
-            )
+            try:
+                structured_logger.log_driver_code(
+                    code=skeleton_code,
+                    step="skeleton",
+                    iteration=state.get("iteration", 0),
+                )
+            except Exception as e:
+                import sys
+                print(f"Warning: Failed to log skeleton: {e}", file=sys.stderr)
 
         return {
             **state,

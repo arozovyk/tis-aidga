@@ -45,6 +45,35 @@ def validator_node(
     # Stage 2: TIS compile (via runner - local or remote)
     # Write driver to runner's location
     if not tis_runner.write_driver(state["current_driver_code"], driver_filename):
+        # Log write failure to structured logger
+        structured_logger = get_structured_logger()
+        if structured_logger:
+            try:
+                structured_logger.log_validation(
+                    iteration=iteration,
+                    cc_result={
+                        "success": cc_result.success,
+                        "command": cc_result.command,
+                        "exit_code": cc_result.exit_code,
+                        "errors": list(cc_result.errors),
+                        "stdout": cc_result.stdout,
+                        "stderr": cc_result.stderr,
+                    },
+                    tis_result={
+                        "success": False,
+                        "command": "(write_driver failed)",
+                        "exit_code": -1,
+                        "errors": ["Failed to write driver to remote"],
+                        "stdout": "",
+                        "stderr": "",
+                        "info_json": None,
+                    },
+                    is_valid=False,
+                )
+            except Exception as e:
+                import sys
+                print(f"Warning: Failed to log validation: {e}", file=sys.stderr)
+
         return {
             **state,
             "cc_result": {
@@ -103,28 +132,35 @@ def validator_node(
 
         # Log to structured logger (separate files)
         structured_logger = get_structured_logger()
+        if not structured_logger:
+            import sys
+            print("DEBUG: structured_logger is None in validator!", file=sys.stderr)
         if structured_logger:
-            structured_logger.log_validation(
-                iteration=iteration,
-                cc_result={
-                    "success": cc_result.success,
-                    "command": cc_result.command,
-                    "exit_code": cc_result.exit_code,
-                    "errors": cc_result.errors,
-                    "stdout": cc_result.stdout,
-                    "stderr": cc_result.stderr,
-                },
-                tis_result={
-                    "success": tis_result.success,
-                    "command": tis_result.command,
-                    "exit_code": tis_result.exit_code,
-                    "errors": tis_result.errors,
-                    "stdout": tis_result.stdout,
-                    "stderr": tis_result.stderr,
-                    "info_json": tis_result.info_json,
-                },
-                is_valid=is_valid,
-            )
+            try:
+                structured_logger.log_validation(
+                    iteration=iteration,
+                    cc_result={
+                        "success": cc_result.success,
+                        "command": cc_result.command,
+                        "exit_code": cc_result.exit_code,
+                        "errors": list(cc_result.errors),
+                        "stdout": cc_result.stdout,
+                        "stderr": cc_result.stderr,
+                    },
+                    tis_result={
+                        "success": tis_result.success,
+                        "command": tis_result.command,
+                        "exit_code": tis_result.exit_code,
+                        "errors": list(tis_result.errors),
+                        "stdout": tis_result.stdout,
+                        "stderr": tis_result.stderr,
+                        "info_json": tis_result.info_json,
+                    },
+                    is_valid=is_valid,
+                )
+            except Exception as e:
+                import sys
+                print(f"Warning: Failed to log validation: {e}", file=sys.stderr)
 
         return {
             **state,

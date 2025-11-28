@@ -180,7 +180,9 @@ class RemoteTISRunner(TISRunnerBase):
 
             sftp.close()
             return True
-        except Exception:
+        except Exception as e:
+            import sys
+            print(f"Warning: Failed to write driver to {self.remote_work_dir}/{driver_path}: {e}", file=sys.stderr)
             return False
 
     def cleanup(self, driver_path: str) -> None:

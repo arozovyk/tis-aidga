@@ -33,8 +33,13 @@ The goal is to detect coding errors that may lead to undefined behaviors.
 ### TIS Builtin Functions (use ONLY these):
 - `void tis_make_unknown(char *addr, unsigned long len)` - Initialize memory with generalized values
 - `int tis_interval(int min, int max)` - Generalized integer in range [min, max]
-- `void *tis_alloc(size_t size)` - Allocate memory (may return NULL)
+- `void *tis_alloc(size_t size)` - Allocate raw memory ONLY for primitive types/arrays (NOT for complex structs with constructors)
 - `void *tis_nondet_ptr(void *p1, void *p2)` - Return either p1 or p2
+
+### Object Creation Rules:
+- **If constructor functions are provided in the context (e.g., `foo_new()`, `foo_create()`)**: USE THEM to create objects. Declare them as `extern` in your driver.
+- **If NO constructor is provided**: Use `tis_alloc()` with manual field initialization
+- **NEVER manually define struct contents when constructors are available** - use opaque forward declarations (`struct foo;`)
 
 ### Rules:
 - Test NULL pointers using `tis_nondet_ptr(valid_ptr, NULL)` unless documented otherwise
@@ -139,23 +144,25 @@ def build_generation_prompt(
     includes = format_include_paths(include_paths or [])
 
     # Add skeleton section if available
+    # NOTE: Skeleton is currently disabled - it provides full struct definitions
+    # which causes LLM to use tis_alloc() instead of factory functions
     skeleton_section = ""
-    if skeleton_code:
-        skeleton_section = f"""### Driver Skeleton:
-
-The following skeleton has been automatically generated using `tis-analyzer -drivergen-skeleton {function_name}`.
-It contains all necessary type definitions and forward declarations.
-
-**CRITICAL**:
-- Use this skeleton as the basis for your driver
-- The skeleton provides all necessary forward declarations - do NOT add project header includes
-- Fill in the body of the `__tis_{function_name}_driver(void)` function with parameter initialization and function calls
-- Do not redefine types that are already forward-declared in the skeleton
-
-```c
-{skeleton_code}
-```
-"""
+    # if skeleton_code:
+    #     skeleton_section = f"""### Driver Skeleton:
+    #
+    # The following skeleton has been automatically generated using `tis-analyzer -drivergen-skeleton {function_name}`.
+    # It contains all necessary type definitions and forward declarations.
+    #
+    # **CRITICAL**:
+    # - Use this skeleton as the basis for your driver
+    # - The skeleton provides all necessary forward declarations - do NOT add project header includes
+    # - Fill in the body of the `__tis_{function_name}_driver(void)` function with parameter initialization and function calls
+    # - Do not redefine types that are already forward-declared in the skeleton
+    #
+    # ```c
+    # {skeleton_code}
+    # ```
+    # """
 
     return DRIVER_GENERATION_TEMPLATE.format(
         function_name=function_name,

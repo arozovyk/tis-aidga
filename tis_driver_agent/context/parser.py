@@ -28,8 +28,10 @@ def extract_leading_comment(node, source_bytes: bytes) -> str:
 
     Handles // and /* */ style comments.
     Stops if there's a gap of >2 newlines.
+    Skips macro-like declarations (e.g., JSON_EXPORT, EXTERN_C).
     """
     comments = []
+    current = node
     prev = node.prev_named_sibling
 
     while prev is not None:
@@ -37,12 +39,31 @@ def extract_leading_comment(node, source_bytes: bytes) -> str:
             comment_text = source_bytes[prev.start_byte:prev.end_byte].decode('utf-8', errors='replace')
 
             # Check for gap between comment and target
-            gap_text = source_bytes[prev.end_byte:node.start_byte].decode('utf-8', errors='replace')
+            gap_text = source_bytes[prev.end_byte:current.start_byte].decode('utf-8', errors='replace')
             if gap_text.count('\n') > 2:
                 break
 
             comments.insert(0, comment_text)
+            current = prev
             prev = prev.prev_named_sibling
+        elif prev.type == 'declaration':
+            # Skip macro-like declarations (e.g., JSON_EXPORT, __attribute__)
+            # These are typically short declarations with just identifiers
+            decl_text = source_bytes[prev.start_byte:prev.end_byte].decode('utf-8', errors='replace').strip()
+            # If it looks like a macro (short, no parens with args)
+            if len(decl_text) < 50 and '(' not in decl_text:
+                current = prev
+                prev = prev.prev_named_sibling
+                continue
+            break
+        elif prev.type == 'expression_statement':
+            # Also skip expression statements that might be macros
+            expr_text = source_bytes[prev.start_byte:prev.end_byte].decode('utf-8', errors='replace').strip()
+            if len(expr_text) < 50:
+                current = prev
+                prev = prev.prev_named_sibling
+                continue
+            break
         else:
             break
 
