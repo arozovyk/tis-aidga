@@ -18,6 +18,10 @@ dependencies = [
 
 [project.optional-dependencies]
 dev = ["pytest>=7.0.0"]
+context = [
+    "tree-sitter>=0.21.0",
+    "tree-sitter-c>=0.21.0",
+]
 
 [project.scripts]
 tisaidga = "tis_driver_agent.cli:main"
