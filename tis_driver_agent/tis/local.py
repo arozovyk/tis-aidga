@@ -98,10 +98,7 @@ class LocalTISRunner(TISRunnerBase):
             [
                 driver_path,
                 sources,
-                "-val",
-                f"-main {main_entry}",
                 f"-machdep {self.machdep}",
-                f"-info-json-results {info_json_file}",
             ]
         )
 
