@@ -1,209 +1,18 @@
 """Prompt templates for driver generation."""
 
+from pathlib import Path
 from typing import List, Dict
 
-TIS_BUILTIN_HEADER = """
-/**************************************************************************/
-/*                                                                        */
-/*  This file is part of TrustInSoft Kernel.                              */
-/*                                                                        */
-/*    Copyright (C) 2016-2025 TrustInSoft                                 */
-/*                                                                        */
-/*  TrustInSoft Kernel is released under GPLv2                            */
-/*                                                                        */
-/**************************************************************************/
+# Path to tis_builtin.h relative to this file
+TIS_BUILTIN_PATH = Path(__file__).parent.parent / "stubs" / "tis_builtin.h"
 
-#ifndef __TIS_DRIVERGEN_BUILTIN_H
-#define __TIS_DRIVERGEN_BUILTIN_H
 
-__BEGIN_DECLS
+def get_tis_builtin_header() -> str:
+    """Read tis_builtin.h from disk."""
+    if TIS_BUILTIN_PATH.exists():
+        return TIS_BUILTIN_PATH.read_text()
+    return "// tis_builtin.h not found"
 
-extern _Thread_local int tis_entropy_source __attribute__((__TIS_MODEL__));
-
-/**
- * Construct an abstract value representing any `int` value between `__min`
- * and `__max` (inclusive).
- *
- * @param __min lowest value in returned interval or set
- * @param __max highest value in returned interval or set
- * @return an abstract value representing an interval or set of possible
- *         `int` values
- */
-int tis_interval(int __min, int __max);
-
-/**
- * Populate an area of memory starting at address `__p` of size `__l` with
- * abstract values representing unknown contents.
- *
- * @param __p pointer to an area of memory to populate
- * @param __l size of the area of memory being populated (in bytes)
- */
-void tis_make_unknown(char *__p, unsigned long __l);
-
-/**
- * Construct an abstract value representing a nondeterministic choice between
- * two signed integer values.
- *
- * @param __a a possible value
- * @param __b a possible value
- * @returns an abstract value representing a set or interval of possible
- *         `int` values
- */
-int tis_nondet(int __a, int __b);
-
-/**
- * Construct an abstract value representing a nondeterministic choice between
- * two pointers.
- *
- * @param __a a pointer to a memory address
- * @param __b a pointer to a memory address
- * @returns an abstract value representing a set or interval of possible
- *         pointers to memory addresses
- */
-void *tis_nondet_ptr(void *__a, void *__b);
-
-/**
- * Make an area of memory starting at address `__p` of size `__l`
- * uninitialized.
- *
- * @param __p pointer to an area of memory to make uninitialized
- * @param __l size of the area of memory being uninitialized (in bytes)
- */
-void tis_make_uninitialized(char *__p, unsigned long __l);
-
-/**
- * Construct an abstract value representing any `int` value between `__min`
- * and `__max` (inclusive) and place each resulting value in a separate state.
- * Equivalent to `tis_interval` followed by `tis_variable_split`.
- *
- * @param __min lowest value in returned interval
- * @param __max highest value in returned interval
- * @return an abstract value representing an interval of possible `int` values
- */
-int tis_interval_split(int __min, int __max);
-
-/**
- * Construct an abstract value representing any `unsigned char` value between
- * `__min` and `__max` (inclusive).
- */
-unsigned char tis_unsigned_char_interval(unsigned char __min, unsigned char __max);
-
-/**
- * Construct an abstract value representing any `char` value between
- * `__min` and `__max` (inclusive).
- */
-char tis_char_interval(char __min, char __max);
-
-/**
- * Construct an abstract value representing any `unsigned short` value between
- * `__min` and `__max` (inclusive).
- */
-unsigned short tis_unsigned_short_interval(unsigned short __min, unsigned short __max);
-
-/**
- * Construct an abstract value representing any `short` value between
- * `__min` and `__max` (inclusive).
- */
-short tis_short_interval(short __min, short __max);
-
-/**
- * Construct an abstract value representing any `unsigned int` value between
- * `__min` and `__max` (inclusive).
- */
-unsigned int tis_unsigned_int_interval(unsigned int __min, unsigned int __max);
-
-/**
- * Construct an abstract value representing any `int` value between `__min`
- * and `__max` (inclusive). Alias: tis_interval
- */
-int tis_int_interval(int __min, int __max);
-
-/**
- * Construct an abstract value representing any `unsigned long` value between
- * `__min` and `__max` (inclusive).
- */
-unsigned long tis_unsigned_long_interval(unsigned long __min, unsigned long __max);
-
-/**
- * Construct an abstract value representing any `long` value between `__min`
- * and `__max` (inclusive).
- */
-long tis_long_interval(long __min, long __max);
-
-/**
- * Construct an abstract value representing any `unsigned long long` value between
- * `__min` and `__max` (inclusive).
- */
-unsigned long long tis_unsigned_long_long_interval(unsigned long long __min, unsigned long long __max);
-
-/**
- * Construct an abstract value representing any `long long` value between
- * `__min` and `__max` (inclusive).
- */
-long long tis_long_long_interval(long long __min, long long __max);
-
-/**
- * Construct an abstract value representing any `float` value between `__min`
- * and `__max` (inclusive).
- */
-float tis_float_interval(float __min, float __max);
-
-/**
- * Construct an abstract value representing any `double` value between `__min`
- * and `__max` (inclusive).
- */
-double tis_double_interval(double __min, double __max);
-
-/**
- * Allocate `__size` bytes and returns a pointer to the allocated memory.
- *
- * @param __size size of the allocated memory in bytes.
- * @return pointer to an allocated area of memory or `NULL`.
- */
-void *tis_alloc(unsigned long __size);
-
-/**
- * Allocate `__size` bytes and returns a pointer to the allocated memory.
- * Never return `NULL`.
- *
- * @param __size size of the allocated memory in bytes.
- * @return pointer to an allocated area of memory (never `NULL`).
- */
-void *tis_alloc_safe(unsigned long __size);
-
-/**
- * Allocate `__size` bytes and returns a pointer to the allocated memory.
- * Never return `NULL`.
- *
- * @param __size size of the allocated memory in bytes.
- * @return pointer to an allocated area of memory (never `NULL`).
- */
-void *tis_alloc_non_null(unsigned long __size);
-
-/**
- * Allocate zeroed memory for an array.
- *
- * @param __nmemb number of elements
- * @param __size size of each element in bytes.
- * @return pointer to an allocated area of memory or `NULL`.
- */
-void *tis_calloc(unsigned long __nmemb, unsigned long __size);
-
-/**
- * Split the state of the analyzer so that each possible value contained at
- * memory location of size `__s` at address `__p` is placed in a separate state
- * (up to `__limit` states).
- *
- * @param __p pointer to an area of memory by which to split the state
- * @param __s size of the area of memory by which to split the state
- * @param __limit upper bound on the number of created states
- */
-void tis_variable_split(void *__p, unsigned long __s, int __limit);
-
-__END_DECLS
-
-#endif /* tis_builtin.h */
-"""
 
 DRIVER_GENERATION_TEMPLATE = """
 You are an expert C programmer specializing in writing randomized unit tests.
@@ -246,6 +55,16 @@ Here is the full `tis_builtin.h` header with all available functions:
 - You can create objects on the stack, with `tis_alloc()`, or using constructor functions from the API
 - If constructor functions are provided in the context (e.g., `foo_new()`, `foo_create()`), prefer using them. Declare them as `extern` in your driver
 - When using constructors, use opaque forward declarations (`struct foo;`) instead of defining struct contents
+
+### Using Generalized Values:
+
+**IMPORTANT:** When passing numeric arguments to functions, use the appropriate interval function instead of hardcoded values. This ensures the analyzer tests all possible values in a range.
+
+Examples:
+- Instead of `create_int(42)`, use `create_int(tis_interval(-1000, 1000))`
+- Instead of `create_double(3.14)`, use `create_double(tis_double_interval(-1e6, 1e6))`
+- Instead of `set_value(100)`, use `set_value(tis_interval(0, INT32_MAX))`
+- For booleans: use `tis_interval(0, 1)` or `tis_nondet(0, 1)`
 
 ### Rules:
 - Test NULL pointers using `tis_nondet_ptr(valid_ptr, NULL)` unless documented otherwise
@@ -372,7 +191,7 @@ def build_generation_prompt(
         include_paths=includes,
         model=model,
         skeleton_section=skeleton_section,
-        tis_builtin_header=TIS_BUILTIN_HEADER,
+        tis_builtin_header=get_tis_builtin_header(),
     )
 
 
@@ -397,3 +216,10 @@ def build_refiner_prompt(
         iteration=iteration,
         max_iterations=max_iterations,
     )
+
+
+# TODO make a switch on a arbitrary tis_interval 0-10000,
+# for each case of the switch exectute signle unit test (make a template). This allows "sandboxing" by branch.
+
+
+#TODO rm tis_init_type

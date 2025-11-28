@@ -117,9 +117,8 @@ class RemoteTISRunner(TISRunnerBase):
                 f"-machdep {self.machdep}",
             ]
         )
-
         cmd = " ".join(cmd_parts)
-
+        print(cmd)
         try:
             stdout, stderr, exit_code = self._run_command(cmd, with_tis_env=True)
 
