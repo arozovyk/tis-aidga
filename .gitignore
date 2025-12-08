@@ -2,7 +2,7 @@
 .env
 
 # Project data
-.tisaidga/
+.tischiron/
 
 # Python
 __pycache__/
@@ -37,6 +37,7 @@ reference_scripts/
 logs
 benchmark_results/
 site/
+drivers
 
 # GUI
 gui/node_modules/

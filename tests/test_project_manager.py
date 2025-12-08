@@ -40,7 +40,7 @@ def sample_compile_commands(temp_projects_dir):
 class TestProjectManager:
     def test_init_default_path(self):
         pm = ProjectManager()
-        assert ".tisaidga/projects" in pm.projects_dir
+        assert ".tischiron/projects" in pm.projects_dir
 
     def test_init_custom_path(self, temp_projects_dir):
         pm = ProjectManager(projects_dir=temp_projects_dir)

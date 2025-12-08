@@ -1,7 +1,7 @@
 {
-  "name": "tis-aidga-gui",
+  "name": "tis-chiron-gui",
   "version": "1.0.0",
-  "description": "GUI for TIS-AIDGA driver generation tool",
+  "description": "GUI for TIS-Chiron driver generation tool",
   "type": "module",
   "scripts": {
     "dev": "concurrently \"npm run server\" \"npm run client\"",

@@ -79,5 +79,5 @@ class AgentConfig:
     tis: TISConfig = field(default_factory=TISConfig)
     max_iterations: int = 5
     projects_dir: str = field(
-        default_factory=lambda: os.path.join(os.getcwd(), ".tisaidga", "projects")
+        default_factory=lambda: os.path.join(os.getcwd(), ".tischiron", "projects")
     )

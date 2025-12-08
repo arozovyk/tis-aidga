@@ -158,7 +158,7 @@ def run_benchmark(
     os.makedirs("drivers", exist_ok=True)
 
     cmd = [
-        "tisaidga",
+        "tischiron",
         "gen",
         project,
         filename,

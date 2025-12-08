@@ -243,7 +243,7 @@ function App() {
   return (
     <div className="app">
       <header className="header">
-        <h1>TIS-AIDGA Driver Generator</h1>
+        <h1>TIS-Chiron Driver Generator</h1>
       </header>
 
       <div className="main-content">
