@@ -16,17 +16,17 @@ from .compilation_db import (
 
 
 class ProjectManager:
-    """Manages tisaidga projects."""
+    """Manages tischiron projects."""
 
     def __init__(self, projects_dir: str = None):
         """
         Initialize project manager.
 
         Args:
-            projects_dir: Directory to store projects. Defaults to .tisaidga/projects
+            projects_dir: Directory to store projects. Defaults to .tischiron/projects
         """
         self.projects_dir = projects_dir or os.path.join(
-            os.getcwd(), ".tisaidga", "projects"
+            os.getcwd(), ".tischiron", "projects"
         )
 
     def _get_project_dir(self, project_name: str) -> str:

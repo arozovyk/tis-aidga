@@ -11,7 +11,7 @@ const PORT = 3001;
 app.use(cors());
 app.use(express.json());
 
-// Get the parent directory where tisaidga is installed
+// Get the parent directory where tischiron is installed
 const PROJECT_ROOT = path.resolve(process.cwd(), '..');
 
 // Simple file upload handling (for compile_commands.json)
@@ -40,7 +40,7 @@ app.post('/api/upload-compile-db', express.raw({ type: 'multipart/form-data', li
       content = content.replace(/\r\n--$/, '').replace(/--\r\n$/, '').trim();
 
       // Save to temp location
-      const uploadDir = path.join(PROJECT_ROOT, '.tisaidga', 'uploads');
+      const uploadDir = path.join(PROJECT_ROOT, '.tischiron', 'uploads');
       if (!fs.existsSync(uploadDir)) {
         fs.mkdirSync(uploadDir, { recursive: true });
       }
@@ -132,7 +132,7 @@ app.post('/api/init', async (req, res) => {
     }
     args.push('-v');
 
-    const result = execSync(`tisaidga ${args.join(' ')}`, {
+    const result = execSync(`tischiron ${args.join(' ')}`, {
       cwd: PROJECT_ROOT,
       encoding: 'utf-8',
     });
@@ -146,7 +146,7 @@ app.post('/api/init', async (req, res) => {
 // List all projects
 app.get('/api/projects', (req, res) => {
   try {
-    const result = execSync('tisaidga list', {
+    const result = execSync('tischiron list', {
       cwd: PROJECT_ROOT,
       encoding: 'utf-8',
     });
@@ -178,7 +178,7 @@ app.get('/api/projects/:project/files', (req, res) => {
   const { project } = req.params;
 
   try {
-    const result = execSync(`tisaidga list ${project} -v`, {
+    const result = execSync(`tischiron list ${project} -v`, {
       cwd: PROJECT_ROOT,
       encoding: 'utf-8',
     });
@@ -211,7 +211,7 @@ app.get('/api/projects/:project/files/:filename/functions', async (req, res) => 
 
   try {
     // Read the project config to get file path
-    const projectDir = path.join(PROJECT_ROOT, '.tisaidga', 'projects', project);
+    const projectDir = path.join(PROJECT_ROOT, '.tischiron', 'projects', project);
     const fileInfoPath = path.join(projectDir, 'files', `${filename}.json`);
 
     if (!fs.existsSync(fileInfoPath)) {
@@ -286,7 +286,7 @@ app.get('/api/generate', (req, res) => {
     '-v',
   ];
 
-  const child = spawn('tisaidga', args, {
+  const child = spawn('tischiron', args, {
     cwd: PROJECT_ROOT,
   });
 

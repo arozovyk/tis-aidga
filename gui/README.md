@@ -1,11 +1,11 @@
-# TIS-AIDGA GUI
+# TIS-Chiron GUI
 
-A TypeScript web GUI for the TIS-AIDGA driver generation tool.
+A TypeScript web GUI for the TIS-Chiron driver generation tool.
 
 ## Prerequisites
 
 - Node.js 18+
-- The `tisaidga` Python CLI must be installed and available in PATH
+- The `tischiron` Python CLI must be installed and available in PATH
 - `OPENAI_API_KEY` environment variable set (for OpenAI models)
 
 ## Installation

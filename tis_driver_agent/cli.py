@@ -212,7 +212,7 @@ def cmd_init(args):
         print("\nAST Index: skipped (--no-index)")
     elif index_stats.get("files", 0) == 0 and len(files) > 0:
         print("\nAST Index: no files accessible (source files are remote)")
-        print("  Run 'tisaidga reindex' after syncing files locally")
+        print("  Run 'tischiron reindex' after syncing files locally")
     else:
         print("\nAST Index: not available")
 
@@ -262,7 +262,7 @@ def cmd_list(args):
         projects = pm.list_projects()
 
         if not projects:
-            print("No projects found. Use 'tisaidga init <compile_commands.json>' to create one.")
+            print("No projects found. Use 'tischiron init <compile_commands.json>' to create one.")
             return
 
         print("Projects:")
@@ -466,7 +466,7 @@ def cmd_gen(args):
 
             index_path = pm.get_index_path(args.project)
             if not os.path.exists(index_path):
-                print(f"Error: AST index not found. Run 'tisaidga reindex {args.project}' first.")
+                print(f"Error: AST index not found. Run 'tischiron reindex {args.project}' first.")
                 sys.exit(1)
 
             ast_context = assemble_context(index_path, args.function)
@@ -652,7 +652,7 @@ def cmd_context(args):
 
     if not os.path.exists(index_path):
         print(f"Error: No AST index found for '{args.project}'")
-        print("Run 'tisaidga reindex <project>' to build the index")
+        print("Run 'tischiron reindex <project>' to build the index")
         return 1
 
     try:
@@ -761,7 +761,7 @@ def cmd_reindex(args):
 
 def main():
     parser = argparse.ArgumentParser(
-        prog="tisaidga",
+        prog="tischiron",
         description="AI-powered TIS driver generation",
     )
 
