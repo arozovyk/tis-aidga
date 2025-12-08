@@ -25,6 +25,7 @@ def _load_env_files():
 
 from .models.openai_adapter import OpenAIAdapter
 from .models.ollama_adapter import OllamaAdapter
+from .models.anthropic_adapter import AnthropicAdapter
 from .tis.remote import RemoteTISRunner
 from .tis.local import LocalTISRunner
 
@@ -42,6 +43,11 @@ OLLAMA_MODELS = [
     "neural-chat",
     "starling",
     "dolphin",
+]
+
+# Known Anthropic model prefixes (for auto-detection)
+ANTHROPIC_MODELS = [
+    "claude",
 ]
 from .graph import create_workflow
 from .utils.project_manager import ProjectManager
@@ -137,20 +143,27 @@ class ModelCompleter:
 
     def __call__(self, prefix, parsed_args, **kwargs):
         models = [
-            # OpenAI - Cheap models (<$0.40/1M input)
-            "gpt-4o-mini",      # $0.15 input, $0.60 output - proven, widely used
-            "gpt-4.1-mini",     # $0.40 input, $1.60 output - newer, improved
-            "gpt-4.1-nano",     # $0.10 input, $0.40 output - very cheap
-            "gpt-5-nano",       # $0.05 input, $0.40 output - cheapest
-            "gpt-5-mini",       # $0.25 input, $2.00 output - gpt-5 architecture
-            # OpenAI - Premium models
+            # OpenAI
+            "gpt-4o-mini",
             "gpt-4o",
             "gpt-4-turbo",
+            "gpt-4.1-mini",
+            "gpt-4.1-nano",
+            "o1-mini",
+            "o3-mini",
+            # Anthropic - Claude 4.5 (latest)
+            "claude-sonnet-4-5",
+            "claude-haiku-4-5",
+            "claude-opus-4-5",
+            # Anthropic - Claude 4
+            "claude-sonnet-4-20250514",
+            "claude-opus-4-20250514",
+            # Anthropic - Claude 3.5
+            "claude-3-5-sonnet-20241022",
+            "claude-3-5-haiku-20241022",
             # Ollama - Local models (free)
             "llama3.2:latest",
-            "llama3.2:1b-instruct-fp16",
             "mistral:7b-instruct",
-            "gemma3:12b-it-q4_K_M",
             "codellama:latest",
             "deepseek-coder:latest",
         ]
@@ -161,6 +174,15 @@ def is_ollama_model(model: str) -> bool:
     """Check if a model should use Ollama adapter."""
     model_lower = model.lower()
     for prefix in OLLAMA_MODELS:
+        if model_lower.startswith(prefix):
+            return True
+    return False
+
+
+def is_anthropic_model(model: str) -> bool:
+    """Check if a model should use Anthropic adapter."""
+    model_lower = model.lower()
+    for prefix in ANTHROPIC_MODELS:
         if model_lower.startswith(prefix):
             return True
     return False
@@ -180,6 +202,18 @@ def create_model_adapter(model: str, api_key: str = None, temperature: float = 0
             print("Make sure Ollama is running: `ollama serve`")
             print(f"And the model is pulled: `ollama pull {model}`")
         return adapter
+    elif is_anthropic_model(model):
+        anthropic_key = os.getenv("ANTHROPIC_API_KEY")
+        if not anthropic_key:
+            print("Error: ANTHROPIC_API_KEY not found.")
+            print("Set it via: export ANTHROPIC_API_KEY='your-key'")
+            print("Or add to .env file in current directory")
+            sys.exit(1)
+        return AnthropicAdapter(
+            model=model,
+            api_key=anthropic_key,
+            temperature=temperature,
+        )
     else:
         return OpenAIAdapter(
             model=model,
@@ -710,6 +744,57 @@ def cmd_context(args):
     return 0
 
 
+def cmd_models(args):
+    """List available models and their requirements."""
+    print("""
+AVAILABLE MODELS
+================
+
+Models are auto-detected by name prefix. Use any model name with --model.
+
+ANTHROPIC (Claude) - requires ANTHROPIC_API_KEY
+------------------------------------------------
+  Claude 4.5 (Latest):
+    claude-sonnet-4-5             Smart, complex agents/coding     $3/$15 per MTok
+    claude-haiku-4-5              Fastest, near-frontier           $1/$5 per MTok
+    claude-opus-4-5               Max intelligence                 $5/$25 per MTok
+
+  Claude 4:
+    claude-sonnet-4-20250514
+    claude-opus-4-20250514
+
+  Claude 3.5:
+    claude-3-5-sonnet-20241022
+    claude-3-5-haiku-20241022
+
+OPENAI - requires OPENAI_API_KEY
+--------------------------------
+  Recommended:
+    gpt-4o-mini                   Fast, cheap, good quality        $0.15/$0.60 per MTok
+    gpt-4o                        More capable                     $2.50/$10 per MTok
+
+  Others: gpt-4-turbo, gpt-4.1-mini, gpt-4.1-nano, o1-mini, o3-mini, etc.
+
+OLLAMA (Local) - free, requires Ollama running
+----------------------------------------------
+  llama3.2:latest                 Good general purpose
+  codellama:latest                Code-focused
+  mistral:7b-instruct             Fast and capable
+  deepseek-coder:latest           Code-focused
+
+  Any model starting with: llama, mistral, gemma, codellama, deepseek,
+  qwen, phi, vicuna, orca, neural-chat, starling, dolphin
+
+ENVIRONMENT SETUP
+-----------------
+  Anthropic: export ANTHROPIC_API_KEY='sk-ant-...'
+  OpenAI:    export OPENAI_API_KEY='sk-...'
+  Ollama:    ollama serve  (then: ollama pull <model>)
+
+  Or add keys to .env file in current directory.
+""")
+
+
 def cmd_reindex(args):
     """Rebuild AST index for a project."""
     pm = ProjectManager()
@@ -838,7 +923,12 @@ def main():
         "--output", "-o", help="Output file path"
     )
     gen_parser.add_argument(
-        "--model", default="gpt-4o-mini", help="Model to use (default: gpt-4o-mini)"
+        "--model", default="gpt-4o-mini",
+        help="""Model to use. Auto-detected by prefix:
+  claude-*  → Anthropic (needs ANTHROPIC_API_KEY)
+  llama-*, mistral-*, etc → Ollama (local)
+  gpt-*, o1-*, etc → OpenAI (needs OPENAI_API_KEY)
+Default: gpt-4o-mini. Use 'tischiron models' for full list."""
     ).completer = ModelCompleter()
     gen_parser.add_argument(
         "--max-iterations", type=int, default=5, help="Maximum refinement iterations"
@@ -891,6 +981,11 @@ def main():
         "project", help="Project name"
     ).completer = ProjectCompleter()
 
+    # models command
+    subparsers.add_parser(
+        "models", help="List available models and their requirements"
+    )
+
     # Enable argcomplete
     argcomplete.autocomplete(parser)
 
@@ -906,6 +1001,8 @@ def main():
         cmd_context(args)
     elif args.command == "reindex":
         cmd_reindex(args)
+    elif args.command == "models":
+        cmd_models(args)
     else:
         parser.print_help()
         sys.exit(1)
