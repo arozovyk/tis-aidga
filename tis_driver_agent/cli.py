@@ -523,9 +523,11 @@ def cmd_gen(args):
                 if args.verbose:
                     summary = get_context_summary(index_path, args.function)
                     print(f"Context mode: ast")
-                    print(f"  Target: {summary.get('target', 'N/A')}")
-                    print(f"  Factories: {summary.get('factory_count', 0)}")
-                    print(f"  Types: {summary.get('type_count', 0)}")
+                    print(f"  Target: {summary.get('function', 'N/A')}")
+                    factories = summary.get('factories', {})
+                    factory_count = sum(len(v) for v in factories.values())
+                    print(f"  Factories: {factory_count}")
+                    print(f"  Types: {len(factories)}")
             else:
                 # Fallback to function extraction
                 func_code = extract_function(source_content, args.function)
