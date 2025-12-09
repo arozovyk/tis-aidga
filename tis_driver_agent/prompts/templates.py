@@ -37,7 +37,7 @@ Function to test: {function_name}
 
 ## Requirements
 
-Write a C11 verification driver for {function_name}.
+Write a comprehensive C11 verification driver for {function_name}. Cover all relevant edge cases and code paths. Go beyond minimal implementations while keeping the driver focused and minimal—do not add unnecessary abstractions, helper functions, or features beyond what's needed to verify the target function.
 
 The goal is to mathematically verify the absence of undefined behaviors (UB) through abstract interpretation.
 TrustInSoft Analyzer executes the code symbolically: given fully-defined C code, if no alarms are raised,
@@ -82,7 +82,7 @@ Stub guidelines:
 
 ### Using Generalized Values:
 
-**IMPORTANT:** When passing numeric arguments to functions, use the appropriate interval function instead of hardcoded values. This ensures the analyzer tests all possible values in a range.
+When passing numeric arguments to functions, use the appropriate interval function instead of hardcoded values. This ensures the analyzer tests all possible values in a range.
 
 Examples:
 - Instead of `create_int(42)`, use `create_int(tis_interval(-1000, 1000))`
@@ -90,7 +90,7 @@ Examples:
 - Instead of `set_value(100)`, use `set_value(tis_interval(0, INT32_MAX))`
 - For booleans: use `tis_interval(0, 1)` or `tis_nondet(0, 1)`
 
-**Over-approximation warning:** When intervals are too wide, the analyzer may need to merge states, causing over-approximation. This can lead to:
+Over-approximation warning: When intervals are too wide, the analyzer may need to merge states, causing over-approximation. This can lead to:
 - False alarms on unrealistic code paths (e.g., error handlers triggered by impossible values)
 - State explosion slowing analysis or exhausting memory
 - Imprecise results that are hard to interpret
@@ -100,13 +100,11 @@ Mitigation strategies:
 - Constrain inputs based on function preconditions or API contracts
 - For complex algorithms (parsers, crypto), consider narrower ranges or multiple targeted drivers
 
-### Rules:
-- Test NULL pointers using `tis_nondet_ptr(valid_ptr, NULL)` unless documented otherwise
-- Array lengths should use #define macros instead of tis_interval for sizes
-- All strings must be null-terminated
-- Focus on exercising code paths rather than testing function effects
-- Initialize all struct fields before use
-- Use "generalized" instead of "random" in comments
+### Guidelines:
+
+Test NULL pointers using `tis_nondet_ptr(valid_ptr, NULL)` unless documentation indicates the pointer must be valid. Array lengths should use `#define` macros instead of `tis_interval` for sizes, as variable-length arrays complicate analysis. Ensure all strings are null-terminated and all struct fields are initialized before use.
+
+Focus on exercising code paths rather than testing function effects—the goal is to reach all branches, not to verify return values. Use "generalized" instead of "random" in comments because "generalized" accurately describes abstract interpretation semantics, while "random" implies probabilistic testing.
 
 ### Header Includes:
 - Include `<tis_builtin.h>` and standard C headers as needed (`<stddef.h>`, `<stdint.h>`, `<string.h>`, etc.)
@@ -114,7 +112,7 @@ Mitigation strategies:
 - Alternatively, use forward declarations for types you don't need to access internals of
 
 ### Output Format:
-Return ONLY C11 code in a ```c block. No explanations outside code comments.
+Return your driver in a single ```c code block. If you need to explain critical decisions, use C comments within the code.
 """
 
 REFINER_TEMPLATE = """
@@ -135,11 +133,8 @@ You are fixing a TIS-Analyzer verification driver that failed compilation.
 - "unbound function tis_*": Include <tis_builtin.h>
 - "Incompatible declaration" / "not isomorphic": Your type definitions conflict with the actual source. Use opaque pointers (`struct X;`) instead of redefining structs, or ensure your definitions exactly match the source
 
-## CRITICAL Rules:
-- NEVER add project-specific headers (e.g., `<json-c/json.h>`, `"myproject.h"`)
-- ONLY use `<tis_builtin.h>` and standard C headers
-- Use forward declarations (`struct X;`) for types you don't need to access internals of
-- The driver is compiled with the actual source files, so forward declarations are sufficient
+## Header Rules:
+Use only `<tis_builtin.h>` and standard C headers. For project types, use forward declarations (`struct X;`) rather than including project headers like `<json-c/json.h>` or `"myproject.h"`. The driver is compiled with the actual source files, so forward declarations are sufficient.
 
 ## Instructions:
 Fix the compilation errors while maintaining the driver's purpose.
