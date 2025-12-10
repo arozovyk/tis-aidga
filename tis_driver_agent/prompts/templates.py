@@ -1,23 +1,38 @@
 """Prompt templates for driver generation."""
 
-from pathlib import Path
 from typing import List, Dict
 
-# Path to tis_builtin.h relative to this file
-TIS_BUILTIN_PATH = Path(__file__).parent.parent / "stubs" / "tis_builtin.h"
+# Condensed TIS builtin reference for prompts (no ACSL, no C++ macros, no URLs)
+TIS_BUILTIN_REFERENCE = """
+// Core interval functions - create generalized values in range [min, max]
+int tis_interval(int min, int max);                    // alias: tis_int_interval
+int tis_int_interval(int min, int max);
+unsigned int tis_unsigned_int_interval(unsigned int min, unsigned int max);
+long tis_long_interval(long min, long max);
+unsigned long tis_unsigned_long_interval(unsigned long min, unsigned long max);
+long long tis_long_long_interval(long long min, long long max);
+unsigned long long tis_unsigned_long_long_interval(unsigned long long min, unsigned long long max);
+short tis_short_interval(short min, short max);
+unsigned short tis_unsigned_short_interval(unsigned short min, unsigned short max);
+char tis_char_interval(char min, char max);
+unsigned char tis_unsigned_char_interval(unsigned char min, unsigned char max);
+float tis_float_interval(float min, float max);
+double tis_double_interval(double min, double max);
+
+// Fill memory with abstract/unknown values
+void tis_make_unknown(char *p, unsigned long len);
+
+// Nondeterministic choice between two values
+int tis_nondet(int a, int b);
+
+// Nondeterministic choice between two pointers (useful for NULL testing)
+static inline void *tis_nondet_ptr(void *a, void *b);
+"""
 
 
-def get_tis_builtin_header() -> str:
-    """Read tis_builtin.h from disk.
-
-    Note: The content is escaped for use with str.format() - all { and } are doubled
-    to prevent them being interpreted as format placeholders.
-    """
-    if TIS_BUILTIN_PATH.exists():
-        content = TIS_BUILTIN_PATH.read_text()
-        # Escape curly braces for str.format() compatibility
-        return content.replace("{", "{{").replace("}", "}}")
-    return "// tis_builtin.h not found"
+def get_tis_builtin_reference() -> str:
+    """Return condensed TIS builtin reference for prompts."""
+    return TIS_BUILTIN_REFERENCE
 
 
 DRIVER_GENERATION_TEMPLATE = """
@@ -26,9 +41,6 @@ You are an expert C programmer specializing in writing verification drivers for 
 ## Context
 
 Function to test: {function_name}
-
-### Include Paths:
-{include_paths}
 
 ### Source Files:
 {context}
@@ -53,12 +65,11 @@ By providing generalized inputs, you help verify that all possible execution pat
 
 ### TIS Builtin Functions:
 
-A "generalized" value means a random value within a specified range. For example, a generalized value between 0 and 10 represents any random value in the range [0, 10].
+A "generalized" value means a value within a specified range that represents all possible values in that range during analysis. For example, `tis_interval(0, 10)` represents any value in [0, 10].
 
-Here is the full `tis_builtin.h` header with all available functions:
-
+Available functions from `<tis_builtin.h>`:
 ```c
-{tis_builtin_header}
+{tis_builtin_reference}
 ```
 
 ### Object Creation:
@@ -220,10 +231,9 @@ def build_generation_prompt(
     return DRIVER_GENERATION_TEMPLATE.format(
         function_name=function_name,
         context=context,
-        include_paths=includes,
         model=model,
         skeleton_section=skeleton_section,
-        tis_builtin_header=get_tis_builtin_header(),
+        tis_builtin_reference=get_tis_builtin_reference(),
     )
 
 
