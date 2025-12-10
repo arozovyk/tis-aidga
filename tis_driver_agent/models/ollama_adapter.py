@@ -37,7 +37,7 @@ class OllamaAdapter:
         }
 
         try:
-            response = requests.post(url, json=payload, timeout=300)
+            response = requests.post(url, json=payload, timeout=None)
             response.raise_for_status()
             result = response.json()
             return result.get("response", "")
@@ -45,10 +45,6 @@ class OllamaAdapter:
             raise ConnectionError(
                 f"Could not connect to Ollama at {self.base_url}. "
                 "Make sure Ollama is running: `ollama serve`"
-            )
-        except requests.exceptions.Timeout:
-            raise TimeoutError(
-                f"Ollama request timed out after 300 seconds for model {self.model}"
             )
 
     def extract_code(self, response: str) -> str:

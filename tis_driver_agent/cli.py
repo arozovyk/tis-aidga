@@ -153,14 +153,17 @@ class ModelCompleter:
             "o3-mini",
             # Anthropic - Claude 4.5 (latest)
             "claude-sonnet-4-5",
+            "claude-3-7-sonnet-20250219",
             "claude-haiku-4-5",
             "claude-opus-4-5",
-            # Anthropic - Claude 4
-            "claude-sonnet-4-20250514",
-            "claude-opus-4-20250514",
-            # Anthropic - Claude 3.5
-            "claude-3-5-sonnet-20241022",
-            "claude-3-5-haiku-20241022",
+            "claude-opus-4-5-20251101"
+            "claude-haiku-4-5-20251001"
+            "claude-sonnet-4-5-20250929"
+            "claude-opus-4-1-20250805"
+            "claude-opus-4-20250514"
+            "claude-sonnet-4-20250514"
+            "claude-3-5-haiku-20241022"
+            "claude-3-haiku-20240307"
             # Ollama - Local models (free)
             "llama3.2:latest",
             "mistral:7b-instruct",
