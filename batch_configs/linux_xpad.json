@@ -1,0 +1,22 @@
+{
+  "project": "linux-xpad",
+  "output_dir": "drivers/linux-xpad",
+  "context_mode": "ast",
+  "functions": {
+    "xpad.c": [
+      "xpad_driver_init",
+      "xpad_probe",
+      "xpad_open",
+      "xpad_suspend",
+      "xpad_resume",
+      "xpad_close",
+      "xpad_disconnect",
+      "xpad_driver_exit",
+      "xpad_irq_in",
+      "xpad_irq_out",
+      "xpad_presence_work",
+      "xpad_led_set",
+      "xpad_play_effect"
+    ]
+  }
+}

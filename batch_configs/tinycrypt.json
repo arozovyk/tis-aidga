@@ -1,0 +1,42 @@
+{
+  "project": "tinycrypt",
+  "output_dir": "drivers/tinycrypt",
+  "context_mode": "ast",
+  "functions": {
+    "aes_encrypt.c": [
+      "tc_aes_encrypt"
+    ],
+    "aes_decrypt.c": [
+      "tc_aes_decrypt"
+    ],
+    "cbc_mode.c": [
+      "tc_cbc_mode_encrypt",
+      "tc_cbc_mode_decrypt"
+    ],
+    "ccm_mode.c": [
+      "tc_ccm_generation_encryption",
+      "tc_ccm_decryption_verification",
+      "ccm_ctr_mode"
+    ],
+    "ctr_mode.c": [
+      "tc_ctr_mode"
+    ],
+    "ctr_prng.c": [
+      "tc_ctr_prng_reseed",
+      "tc_ctr_prng_generate",
+      "tc_ctr_prng_uninstantiate"
+    ],
+    "ecc_dh.c": [
+      "uECC_make_key",
+      "uECC_shared_secret"
+    ],
+    "hmac.c": [
+      "tc_hmac_update",
+      "tc_hmac_final"
+    ],
+    "sha256.c": [
+      "tc_sha256_update",
+      "tc_sha256_final"
+    ]
+  }
+}
