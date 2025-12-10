@@ -73,9 +73,27 @@ Available functions from `<tis_builtin.h>`:
 ```
 
 ### Object Creation:
-- You can create objects on the stack, with `tis_alloc()`, or using constructor functions from the API
-- If constructor functions are provided in the context (e.g., `foo_new()`, `foo_create()`), prefer using them. Declare them as `extern` in your driver
+- If constructor functions are provided in the context (e.g., `foo_new()`, `foo_create()`), use them. Declare them as `extern` in your driver
 - When using constructors, use opaque forward declarations (`struct foo;`) instead of defining struct contents
+
+<c_syntax_for_opaque_types>
+When you forward-declare a struct type, C requires the `struct` keyword in all uses until a typedef is created. Since the driver uses forward declarations without typedefs, always include `struct` when referencing these types.
+
+Example with `my_object`:
+```c
+// Forward declaration
+struct my_object;
+
+// Function declarations - use "struct my_object *"
+extern struct my_object *my_object_new(int value);
+extern void my_object_free(struct my_object *obj);
+
+// Variables - use "struct my_object *"
+struct my_object *obj = my_object_new(42);
+```
+
+Copy the exact function signatures from the "Required Extern Declarations" section in the context. These signatures have the correct types and return values. Adding functions not listed there may cause compilation errors due to mismatched signatures.
+</c_syntax_for_opaque_types>
 
 ### Stubs:
 A stub is a simplified reimplementation of a function that produces sufficiently accurate behavior for analysis without the full implementation complexity.
@@ -138,18 +156,44 @@ You are fixing a TIS-Analyzer verification driver that failed compilation.
 {errors}
 
 ## Common Fixes:
+
+<fix_syntax_error_after_variable_name>
+"syntax error... unexpected input after the variable name X": This means a forward-declared struct type is missing the `struct` keyword.
+
+When you forward-declare `struct X;`, you must write `struct X *` everywhere, not just `X *`.
+
+Fix by adding `struct` before the type name:
+```c
+// Wrong - causes "unexpected input after variable name my_object"
+extern my_object *my_object_new(int i);
+my_object *obj;
+
+// Correct - use "struct my_object"
+extern struct my_object *my_object_new(int i);
+struct my_object *obj;
+```
+</fix_syntax_error_after_variable_name>
+
+<fix_incompatible_declaration>
+"Incompatible declaration for X: different type constructors": Your function declaration has the wrong return type or parameter types compared to the actual library.
+
+Fix by checking what the real function returns. Common mistakes:
+- A `*_put` or `*_free` function may return `int` (refcount), not `void`
+- A `*_add` function may return `int` (success/error code), not `void`
+
+Remove any function declarations you added that weren't in the original context, or correct their signatures to match the actual API.
+</fix_incompatible_declaration>
+
 - "incomplete type": Provide full struct definition with all fields, not just forward declaration
-- "undeclared identifier": Add missing forward declaration (do NOT add project header includes)
+- "undeclared identifier": Add missing forward declaration
 - "variable-sized object": Use #define macros for array sizes
 - "unbound function tis_*": Include <tis_builtin.h>
-- "Incompatible declaration" / "not isomorphic": Your type definitions conflict with the actual source. Use opaque pointers (`struct X;`) instead of redefining structs, or ensure your definitions exactly match the source
 
 ## Header Rules:
-Use only `<tis_builtin.h>` and standard C headers. For project types, use forward declarations (`struct X;`) rather than including project headers like `<json-c/json.h>` or `"myproject.h"`. The driver is compiled with the actual source files, so forward declarations are sufficient.
+Use only `<tis_builtin.h>` and standard C headers. For project types, use forward declarations (`struct X;`) rather than including project headers. The driver is compiled with the actual source files.
 
 ## Instructions:
-Fix the compilation errors while maintaining the driver's purpose.
-Return the complete corrected driver in a ```c block.
+Fix the compilation errors and return the complete corrected driver in a ```c block.
 
 Iteration: {iteration}/{max_iterations}
 """
