@@ -9,6 +9,7 @@ from .lookup import (
     get_connection,
     get_function,
     collect_factories_recursive,
+    find_initializers,
     find_type,
 )
 from .parser import normalize_type, categorize_type
@@ -143,7 +144,16 @@ def assemble_context(
                 target_function_name=function_name,
             )
 
-        # 4. Get type definitions
+        # 4. Collect initializers for each type (for types without factories)
+        initializers: Dict[str, List[FunctionInfo]] = {}
+        for ptype in param_types:
+            normalized = normalize_type(ptype)
+            # Find initializers for this type
+            type_initializers = find_initializers(conn, ptype, function_name)
+            if type_initializers:
+                initializers[normalized] = type_initializers
+
+        # 5. Get type definitions
         type_defs: Dict[str, TypeInfo] = {}
         if include_types:
             for ptype in param_types:
@@ -151,30 +161,43 @@ def assemble_context(
                 if type_info:
                     type_defs[normalize_type(ptype)] = type_info
 
-            # Also get enum types used in top factories (limit to top 3 per type)
-            for _, funcs in factories.items():
-                for func in funcs[:3]:  # Only top 3 to avoid noise from low-ranked factories
-                    for param in func.params:
-                        if categorize_type(param.type) == 'enum':
-                            enum_info = find_type(conn, param.type)
-                            if enum_info:
-                                type_defs[normalize_type(param.type)] = enum_info
+            # Also get enum types used in top factories/initializers
+            all_funcs = []
+            for funcs in factories.values():
+                all_funcs.extend(funcs[:3])
+            for funcs in initializers.values():
+                all_funcs.extend(funcs[:3])
 
-        # 5. Collect factory signatures and resolve type dependencies
-        factory_signatures = []
+            for func in all_funcs:
+                for param in func.params:
+                    if categorize_type(param.type) == 'enum':
+                        enum_info = find_type(conn, param.type)
+                        if enum_info:
+                            type_defs[normalize_type(param.type)] = enum_info
+
+        # 6. Collect function signatures and resolve type dependencies
+        all_signatures = []
         for funcs in factories.values():
-            for func in funcs[:5]:  # Top 5 per type
+            for func in funcs[:5]:
                 sig = func.source.split('{')[0].strip() if '{' in func.source else func.source.strip()
                 if 'static ' not in sig:
-                    factory_signatures.append(sig)
+                    all_signatures.append(sig)
+        for funcs in initializers.values():
+            for func in funcs[:5]:
+                sig = func.source.split('{')[0].strip() if '{' in func.source else func.source.strip()
+                if 'static ' not in sig:
+                    all_signatures.append(sig)
 
         # Extract and resolve type dependencies from signatures
-        required_type_names = extract_type_identifiers(factory_signatures)
+        required_type_names = extract_type_identifiers(all_signatures)
         required_type_defs = resolve_type_definitions(conn, required_type_names)
 
-        # 6. Format context (pass target param types for forward declarations)
+        # 7. Format context (pass target param types for forward declarations)
         target_param_types = set(normalize_type(pt) for pt in param_types)
-        return format_context(target, factories, type_defs, required_type_defs, target_param_types)
+        return format_context(
+            target, factories, initializers, type_defs,
+            required_type_defs, target_param_types
+        )
 
     finally:
         conn.close()
@@ -183,6 +206,7 @@ def assemble_context(
 def format_context(
     target: FunctionInfo,
     factories: Dict[str, List[FunctionInfo]],
+    initializers: Dict[str, List[FunctionInfo]],
     type_defs: Dict[str, TypeInfo],
     required_type_defs: Optional[Dict[str, str]] = None,
     target_param_types: Optional[Set[str]] = None,
@@ -193,8 +217,9 @@ def format_context(
     Args:
         target: Target function info
         factories: Dict of type_name -> list of factory functions
+        initializers: Dict of type_name -> list of initializer functions
         type_defs: Dict of type definitions
-        required_type_defs: Dict of required type definitions from factory signatures
+        required_type_defs: Dict of required type definitions from signatures
         target_param_types: Set of normalized type names that the target function needs
                            (only these get forward declarations)
 
@@ -239,21 +264,29 @@ def format_context(
         lines.append("```")
         lines.append("")
 
-    # Object creation API - only show factories for types the target function needs
+    # Filter to relevant types only
     relevant_factories = {
         k: v for k, v in factories.items()
         if not target_param_types or k in target_param_types
     }
+    relevant_initializers = {
+        k: v for k, v in initializers.items()
+        if not target_param_types or k in target_param_types
+    }
 
+    # Types to declare (for extern declarations)
+    types_to_declare = target_param_types if target_param_types else set()
+    types_to_declare = types_to_declare | set(factories.keys()) | set(initializers.keys())
+
+    # ========== FACTORY PATTERN (allocate + return) ==========
     if relevant_factories:
-        lines.append("### Object Creation API")
+        lines.append("### Object Creation API (Factory Pattern)")
         lines.append("")
         lines.append("**CRITICAL: Use these constructor functions to create objects.**")
         lines.append("**DO NOT use `tis_alloc()`, `malloc()`, or manual struct allocation for these types.**")
         lines.append("")
 
         for type_name, funcs in relevant_factories.items():
-            # Limit to top 10 most relevant factories per type
             top_funcs = funcs[:10]
 
             lines.append(f"#### Constructors for `{type_name}` (struct {type_name} *)")
@@ -263,18 +296,15 @@ def format_context(
             lines.append("```c")
 
             for func in top_funcs:
-                # Include doc comment if present (truncated if too long)
                 if func.doc_comment:
                     doc_lines = func.doc_comment.strip().split('\n')
                     if len(doc_lines) > 5:
                         doc_lines = doc_lines[:5] + ['...']
                     lines.append('\n'.join(doc_lines))
 
-                # Location comment
                 basename = os.path.basename(func.file_path)
                 lines.append(f"// From {basename}:{func.line_number}")
 
-                # Function signature only (not full body)
                 sig = func.source.split('{')[0].strip() if '{' in func.source else func.source.strip()
                 if not sig.endswith(';'):
                     sig += ';'
@@ -287,50 +317,137 @@ def format_context(
                 lines.append(f"*({len(funcs) - 10} more constructors available)*")
             lines.append("")
 
-        # Add extern declarations section that the LLM can copy
+    # ========== INITIALIZER PATTERN (caller allocates, function initializes) ==========
+    if relevant_initializers:
+        lines.append("### Object Initialization API (Initializer Pattern)")
+        lines.append("")
+        lines.append("**These types use the INITIALIZER pattern:** allocate the struct yourself, then call an initializer.")
+        lines.append("")
+
+        for type_name, funcs in relevant_initializers.items():
+            top_funcs = funcs[:10]
+
+            # Get type info to check if it's a pointer typedef
+            type_info = type_defs.get(type_name)
+            underlying_struct = type_info.pointer_to if type_info and type_info.pointer_to else type_name
+
+            lines.append(f"#### Initializers for `{type_name}`")
+            lines.append("")
+
+            # Show usage pattern
+            if type_info and type_info.pointer_to:
+                lines.append(f"**Note:** `{type_name}` is a pointer typedef to `struct {underlying_struct}`.")
+                lines.append("")
+            lines.append("**Usage pattern:**")
+            lines.append("```c")
+            lines.append(f"// 1. Allocate the struct on the stack")
+            lines.append(f"struct {underlying_struct} obj;")
+            lines.append("")
+            lines.append(f"// 2. Initialize using one of the functions below")
+            if top_funcs:
+                # Show first initializer as example
+                first_init = top_funcs[0]
+                lines.append(f"// {first_init.name}(&obj, ...);")
+            lines.append("")
+            lines.append(f"// 3. Pass to target function")
+            lines.append(f"// {target.name}(..., &obj, ...);")
+            lines.append("```")
+            lines.append("")
+
+            lines.append("**Available initializer functions:**")
+            lines.append("")
+            lines.append("```c")
+
+            for func in top_funcs:
+                if func.doc_comment:
+                    doc_lines = func.doc_comment.strip().split('\n')
+                    if len(doc_lines) > 5:
+                        doc_lines = doc_lines[:5] + ['...']
+                    lines.append('\n'.join(doc_lines))
+
+                basename = os.path.basename(func.file_path)
+                lines.append(f"// From {basename}:{func.line_number}")
+
+                sig = func.source.split('{')[0].strip() if '{' in func.source else func.source.strip()
+                if not sig.endswith(';'):
+                    sig += ';'
+                lines.append(sig)
+                lines.append("")
+
+            lines.append("```")
+
+            if len(funcs) > 10:
+                lines.append(f"*({len(funcs) - 10} more initializers available)*")
+            lines.append("")
+
+    # ========== EXTERN DECLARATIONS ==========
+    if relevant_factories or relevant_initializers:
         lines.append("### Required Extern Declarations")
         lines.append("")
-        lines.append("**Copy these declarations into your driver to use the constructor functions:**")
+        lines.append("**Copy these declarations into your driver:**")
         lines.append("")
         lines.append("```c")
-        lines.append("// Forward declare opaque types (DO NOT define the struct contents)")
-        # Only forward-declare types that the target function actually needs,
-        # not types that appear as factory parameters (e.g., json_tokener)
-        types_to_declare = target_param_types if target_param_types else set(factories.keys())
+
+        # Forward declare struct types
+        # For pointer typedefs, declare the underlying struct
+        declared_structs = set()
         for type_name in types_to_declare:
-            lines.append(f"struct {type_name};")
+            type_info = type_defs.get(type_name)
+            if type_info and type_info.pointer_to:
+                struct_name = type_info.pointer_to
+            else:
+                struct_name = type_name
+            if struct_name not in declared_structs:
+                lines.append(f"struct {struct_name};")
+                declared_structs.add(struct_name)
         lines.append("")
 
         # Include required type definitions (typedefs, enums used in signatures)
         if required_type_defs:
-            lines.append("// Required type definitions for constructor parameters")
+            lines.append("// Required type definitions")
             for type_name, type_source in required_type_defs.items():
-                # Clean up the source - just include the typedef/enum definition
                 source = type_source.strip()
                 if not source.endswith(';'):
                     source += ';'
                 lines.append(source)
             lines.append("")
 
-        # Collect all signatures (only from relevant factories)
-        # Ensure signatures use 'struct' keyword for opaque types
+        # Collect all function signatures
         signatures = []
+
+        # Factory signatures
         for type_name, funcs in relevant_factories.items():
-            for func in funcs[:5]:  # Top 5 per type
+            for func in funcs[:5]:
                 sig = func.source.split('{')[0].strip() if '{' in func.source else func.source.strip()
                 if not sig.endswith(';'):
                     sig += ';'
                 if 'static ' in sig:
                     continue
-                # Add struct keyword for opaque types to ensure correct C syntax
-                sig = add_struct_keyword_to_signature(sig, types_to_declare)
+                sig = add_struct_keyword_to_signature(sig, declared_structs)
                 if not sig.startswith('extern'):
                     sig = 'extern ' + sig
-                signatures.append(sig)
+                if sig not in signatures:
+                    signatures.append(sig)
 
-        lines.append("// Constructor function declarations")
-        for sig in signatures:
-            lines.append(sig)
+        # Initializer signatures
+        for type_name, funcs in relevant_initializers.items():
+            for func in funcs[:5]:
+                sig = func.source.split('{')[0].strip() if '{' in func.source else func.source.strip()
+                if not sig.endswith(';'):
+                    sig += ';'
+                if 'static ' in sig:
+                    continue
+                sig = add_struct_keyword_to_signature(sig, declared_structs)
+                if not sig.startswith('extern'):
+                    sig = 'extern ' + sig
+                if sig not in signatures:
+                    signatures.append(sig)
+
+        if signatures:
+            lines.append("// Function declarations")
+            for sig in signatures:
+                lines.append(sig)
+
         lines.append("```")
         lines.append("")
 
@@ -341,7 +458,10 @@ def format_context(
 
         for type_name, type_info in type_defs.items():
             if type_info.source:
-                lines.append(f"// {type_info.category}: {type_name}")
+                category_str = type_info.category
+                if type_info.pointer_to:
+                    category_str += f" (pointer to struct {type_info.pointer_to})"
+                lines.append(f"// {category_str}: {type_name}")
                 lines.append(type_info.source)
                 lines.append("")
 
@@ -362,6 +482,11 @@ def format_context(
             if category == 'struct_ptr' and normalized in factories:
                 factory_names = [f.name for f in factories[normalized][:3]]
                 approach = f"Use `{factory_names[0]}()`" + (f" or similar" if len(factory_names) > 1 else "")
+            elif category == 'struct_ptr' and normalized in initializers:
+                init_names = [f.name for f in initializers[normalized][:3]]
+                type_info = type_defs.get(normalized)
+                underlying = type_info.pointer_to if type_info and type_info.pointer_to else normalized
+                approach = f"Stack-allocate `struct {underlying}`, then `{init_names[0]}()`"
             elif category == 'string':
                 approach = "`malloc()` + `tis_make_unknown()` + null-terminate"
             elif category == 'enum':
@@ -405,12 +530,25 @@ def get_context_summary(index_path: str, function_name: str) -> Optional[Dict]:
                     target_function_name=function_name,
                 )
 
+        # Collect initializers
+        initializers: Dict[str, List[FunctionInfo]] = {}
+        for param in target.params:
+            if categorize_type(param.type) == 'struct_ptr':
+                normalized = normalize_type(param.type)
+                type_initializers = find_initializers(conn, param.type, function_name)
+                if type_initializers:
+                    initializers[normalized] = type_initializers
+
         return {
             "function": target.name,
             "params": [(p.type, p.name) for p in target.params],
             "factories": {
                 type_name: [f.name for f in funcs]
                 for type_name, funcs in factories.items()
+            },
+            "initializers": {
+                type_name: [f.name for f in funcs]
+                for type_name, funcs in initializers.items()
             },
         }
 

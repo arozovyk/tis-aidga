@@ -5,7 +5,6 @@ from functools import partial
 
 from .state import DriverState
 from .nodes.planner import planner_node
-from .nodes.skeleton import skeleton_node
 from .nodes.router import router_node, route_decision
 from .nodes.generator import generator_node
 from .nodes.validator import validator_node
@@ -30,7 +29,6 @@ def create_workflow(
     workflow = StateGraph(DriverState)
 
     # Bind dependencies to nodes
-    bound_skeleton = partial(skeleton_node, tis_runner=tis_runner)
     bound_generator = partial(generator_node, model_adapter=model_adapter)
     bound_validator = partial(validator_node, tis_runner=tis_runner)
     bound_refiner = partial(refiner_node, model_adapter=model_adapter)
@@ -47,7 +45,6 @@ def create_workflow(
 
     # Add nodes
     workflow.add_node("planner", planner_node)
-    workflow.add_node("skeleton", bound_skeleton)
     workflow.add_node("router", router_node)
     workflow.add_node("generator", bound_generator)
     workflow.add_node("validator", bound_validator)
@@ -56,8 +53,7 @@ def create_workflow(
 
     # Define edges
     workflow.set_entry_point("planner")
-    workflow.add_edge("planner", "skeleton")
-    workflow.add_edge("skeleton", "router")
+    workflow.add_edge("planner", "router")
     workflow.add_conditional_edges(
         "router",
         route_decision,

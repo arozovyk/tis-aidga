@@ -54,15 +54,21 @@ class FunctionInfo:
 class TypeInfo:
     """Extracted type information."""
     name: str
-    category: str  # "struct_ptr" | "primitive" | "string" | "func_ptr" | "enum"
+    category: str  # "struct_ptr" | "pointer_typedef" | "primitive" | "string" | "func_ptr" | "enum"
     enum_values: List[str] = field(default_factory=list)
     file_path: str = ""
     source: str = ""
+    pointer_to: Optional[str] = None  # For pointer typedefs: the underlying struct name
 
     @classmethod
     def from_row(cls, row: tuple) -> "TypeInfo":
         """Create from SQLite row."""
-        name, category, enum_values_json, file_path, source = row
+        # Handle both old (5 columns) and new (6 columns) schema
+        if len(row) == 5:
+            name, category, enum_values_json, file_path, source = row
+            pointer_to = None
+        else:
+            name, category, enum_values_json, file_path, source, pointer_to = row
         enum_values = json.loads(enum_values_json) if enum_values_json else []
         return cls(
             name=name,
@@ -70,4 +76,5 @@ class TypeInfo:
             enum_values=enum_values,
             file_path=file_path or "",
             source=source or "",
+            pointer_to=pointer_to,
         )

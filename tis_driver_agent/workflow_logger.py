@@ -96,7 +96,6 @@ class StructuredLogger:
     def log_validation(
         self,
         iteration: int,
-        cc_result: Optional[Dict[str, Any]],
         tis_result: Optional[Dict[str, Any]],
         is_valid: bool,
     ) -> str:
@@ -105,7 +104,6 @@ class StructuredLogger:
 
         Args:
             iteration: Current iteration number
-            cc_result: CC compilation result dict
             tis_result: TIS compilation result dict
             is_valid: Whether validation passed
 
@@ -121,7 +119,6 @@ class StructuredLogger:
             "iteration": iteration,
             "timestamp": datetime.now().isoformat(),
             "is_valid": is_valid,
-            "cc_compile": cc_result,
             "tis_compile": tis_result,
         }
 
@@ -130,14 +127,13 @@ class StructuredLogger:
 
         # If validation failed, also create a plain text error file
         if not is_valid:
-            self._log_validation_error(iteration, cc_result, tis_result)
+            self._log_validation_error(iteration, tis_result)
 
         return filepath
 
     def _log_validation_error(
         self,
         iteration: int,
-        cc_result: Optional[Dict[str, Any]],
         tis_result: Optional[Dict[str, Any]],
     ) -> str:
         """
@@ -145,7 +141,6 @@ class StructuredLogger:
 
         Args:
             iteration: Current iteration number
-            cc_result: CC compilation result dict
             tis_result: TIS compilation result dict
 
         Returns:
@@ -156,19 +151,6 @@ class StructuredLogger:
         filepath = os.path.join(self.logs_dir, filename)
 
         lines = []
-
-        # CC errors
-        if cc_result and not cc_result.get("success", True):
-            lines.append("=== CC Compilation Errors ===")
-            lines.append("")
-            if cc_result.get("errors"):
-                for err in cc_result["errors"]:
-                    lines.append(err)
-                    lines.append("")
-            if cc_result.get("stdout"):
-                lines.append("Output:")
-                lines.append(cc_result["stdout"])
-                lines.append("")
 
         # TIS errors
         if tis_result and not tis_result.get("success", True):
@@ -307,34 +289,6 @@ class WorkflowLogger:
         self._write(code)
         self._write("\n```\n\n")
 
-    def log_cc_result(
-        self,
-        success: bool,
-        command: str,
-        exit_code: int,
-        stdout: str,
-        stderr: str,
-        errors: List[str],
-    ):
-        """Log CC compilation result."""
-        self._write(f"CC COMPILATION: {'SUCCESS' if success else 'FAILED'}\n")
-        self._write("-" * 40 + "\n")
-        self._write(f"Command: {command}\n")
-        self._write(f"Exit code: {exit_code}\n")
-
-        if stdout.strip():
-            self._write(f"\nStdout:\n{stdout}\n")
-
-        if stderr.strip():
-            self._write(f"\nStderr:\n{stderr}\n")
-
-        if errors:
-            self._write(f"\nParsed errors ({len(errors)}):\n")
-            for err in errors:
-                self._write(f"  - {err}\n")
-
-        self._write("\n")
-
     def log_tis_result(
         self,
         success: bool,
@@ -366,14 +320,12 @@ class WorkflowLogger:
     def log_validation_decision(
         self,
         is_valid: bool,
-        cc_success: bool,
         tis_success: bool,
         error_summary: str,
     ):
         """Log validation decision and reasoning."""
         self._write(f"VALIDATION DECISION: {'PASS' if is_valid else 'FAIL'}\n")
         self._write("-" * 40 + "\n")
-        self._write(f"CC compile passed: {cc_success}\n")
         self._write(f"TIS compile passed: {tis_success}\n")
         if error_summary:
             self._write(f"Error summary: {error_summary}\n")

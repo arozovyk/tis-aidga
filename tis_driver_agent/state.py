@@ -16,13 +16,11 @@ class DriverState(TypedDict):
 
     # Processing
     plan: Optional[str]
-    skeleton_code: Optional[str]  # Generated skeleton from tis-analyzer
     current_driver_code: Optional[str]
     iteration: int
     max_iterations: int
 
     # Validation
-    cc_result: Optional[dict]
     tis_result: Optional[dict]
     validation_errors: List[dict]
 

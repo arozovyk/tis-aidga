@@ -293,7 +293,30 @@ def _extract_type_info(node, file_path: str, source_bytes: bytes) -> Optional[Ty
         )
 
     elif node.type == 'type_definition':
-        # Find the typedef name
+        # Check for pointer typedef pattern: typedef struct X {} *TypeName;
+        # In this case, we have a pointer_declarator containing the typedef name
+        pointer_declarator = _find_child_by_type(node, 'pointer_declarator')
+        struct_specifier = _find_child_by_type(node, 'struct_specifier')
+
+        if pointer_declarator and struct_specifier:
+            # This is a pointer typedef: typedef struct X {} *TypeName;
+            typedef_name_node = _find_descendant_by_type(pointer_declarator, 'type_identifier')
+            if typedef_name_node:
+                typedef_name = _get_node_text(typedef_name_node, source_bytes)
+
+                # Get the underlying struct name
+                struct_name_node = _find_child_by_type(struct_specifier, 'type_identifier')
+                struct_name = _get_node_text(struct_name_node, source_bytes) if struct_name_node else None
+
+                return TypeInfo(
+                    name=typedef_name,
+                    category='pointer_typedef',
+                    file_path=file_path,
+                    source=_get_node_text(node, source_bytes),
+                    pointer_to=struct_name,
+                )
+
+        # Regular typedef: find the typedef name
         name_node = _find_child_by_type(node, 'type_identifier')
         if not name_node:
             return None
@@ -301,10 +324,16 @@ def _extract_type_info(node, file_path: str, source_bytes: bytes) -> Optional[Ty
 
         # Try to find the underlying type
         underlying = ""
+        pointer_to = None
         for child in node.children:
             if child.type in ('primitive_type', 'type_identifier', 'sized_type_specifier',
                              'struct_specifier', 'enum_specifier'):
                 underlying = _get_node_text(child, source_bytes)
+                # If underlying is a struct specifier, extract struct name for pointer_to
+                if child.type == 'struct_specifier':
+                    struct_name_node = _find_child_by_type(child, 'type_identifier')
+                    if struct_name_node:
+                        pointer_to = _get_node_text(struct_name_node, source_bytes)
                 break
 
         category = categorize_type(underlying) if underlying else 'primitive'
@@ -314,6 +343,7 @@ def _extract_type_info(node, file_path: str, source_bytes: bytes) -> Optional[Ty
             category=category,
             file_path=file_path,
             source=_get_node_text(node, source_bytes),
+            pointer_to=pointer_to,
         )
 
     return None
@@ -347,7 +377,11 @@ def categorize_type(type_str: str) -> str:
     """Categorize a type string."""
     t = type_str.strip()
 
-    if re.match(r'(int|long|short|char|float|double|size_t|u?int\d+_t|bool|_Bool)', t):
+    # Check for explicit primitives first
+    if re.match(r'^(const\s+)?(unsigned\s+)?(int|long|short|char|float|double|void)\s*$', t):
+        return 'primitive'
+    # Standard fixed-width integer types
+    if re.match(r'^(const\s+)?(u?int\d+_t|size_t|ssize_t|ptrdiff_t|bool|_Bool)\s*$', t):
         return 'primitive'
     if re.match(r'(const\s+)?char\s*\*', t):
         return 'string'
@@ -356,6 +390,16 @@ def categorize_type(type_str: str) -> str:
     if 'enum' in t:
         return 'enum'
     if '*' in t or 'struct' in t:
+        return 'struct_ptr'
+    # Types ending with _t that aren't standard primitives are likely typedef'd pointers
+    # Examples: TCAesKeySched_t, json_object_t, etc.
+    # Remove const qualifier for matching
+    bare_type = re.sub(r'\bconst\b', '', t).strip()
+    if re.match(r'^[A-Z].*_t$', bare_type):
+        # Capitalized type ending in _t - likely a typedef'd pointer (common C convention)
+        return 'struct_ptr'
+    if re.match(r'^[a-z_]+_t$', bare_type) and bare_type not in ('size_t', 'ssize_t', 'ptrdiff_t'):
+        # Lowercase type ending in _t that's not a standard type - might be a typedef'd pointer
         return 'struct_ptr'
     return 'primitive'
 

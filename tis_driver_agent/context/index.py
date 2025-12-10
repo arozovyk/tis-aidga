@@ -17,7 +17,7 @@ from .parser import (
 )
 
 
-SCHEMA_VERSION = 1
+SCHEMA_VERSION = 2
 
 SCHEMA = """
 CREATE TABLE IF NOT EXISTS functions (
@@ -42,7 +42,8 @@ CREATE TABLE IF NOT EXISTS types (
     category TEXT NOT NULL,
     enum_values_json TEXT,
     file_path TEXT,
-    source TEXT
+    source TEXT,
+    pointer_to TEXT
 );
 
 CREATE INDEX IF NOT EXISTS idx_type_name ON types(name);
@@ -55,9 +56,36 @@ CREATE TABLE IF NOT EXISTS meta (
 """
 
 
+def _migrate_schema(conn: sqlite3.Connection, current_version: int) -> None:
+    """Migrate database schema from older versions."""
+    if current_version < 2:
+        # Add pointer_to column to types table
+        try:
+            conn.execute("ALTER TABLE types ADD COLUMN pointer_to TEXT")
+            conn.commit()
+        except sqlite3.OperationalError:
+            # Column already exists
+            pass
+
+
 def _create_schema(conn: sqlite3.Connection) -> None:
-    """Create database schema."""
+    """Create database schema, with migration support."""
+    # Check if meta table exists and get current version
+    try:
+        result = conn.execute(
+            "SELECT value FROM meta WHERE key = 'schema_version'"
+        ).fetchone()
+        current_version = int(result[0]) if result else 0
+    except sqlite3.OperationalError:
+        current_version = 0
+
+    # Create tables if they don't exist
     conn.executescript(SCHEMA)
+
+    # Run migrations if needed
+    if current_version < SCHEMA_VERSION:
+        _migrate_schema(conn, current_version)
+
     conn.execute(
         "INSERT OR REPLACE INTO meta VALUES ('schema_version', ?)",
         (str(SCHEMA_VERSION),)
@@ -156,14 +184,15 @@ def build_index(
             try:
                 conn.execute("""
                     INSERT OR REPLACE INTO types
-                    (name, category, enum_values_json, file_path, source)
-                    VALUES (?, ?, ?, ?, ?)
+                    (name, category, enum_values_json, file_path, source, pointer_to)
+                    VALUES (?, ?, ?, ?, ?, ?)
                 """, (
                     type_info.name,
                     type_info.category,
                     json.dumps(type_info.enum_values),
                     type_info.file_path,
                     type_info.source,
+                    type_info.pointer_to,
                 ))
                 stats["types"] += 1
             except sqlite3.IntegrityError:

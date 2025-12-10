@@ -66,35 +66,63 @@ def get_function(conn: sqlite3.Connection, name: str) -> Optional[FunctionInfo]:
     return FunctionInfo.from_row(rows[0])
 
 
+def _is_initializer_pattern(func_name: str) -> bool:
+    """
+    Check if a function name suggests it's an initializer.
+
+    Initializers are functions that populate/configure pre-allocated memory.
+    They take T* as parameter and return int (error code) or void.
+    """
+    name_lower = func_name.lower()
+
+    # Initializer naming patterns
+    initializer_patterns = (
+        '_init',      # tc_sha256_init, json_object_init
+        '_set_',      # tc_aes128_set_encrypt_key, tc_hmac_set_key
+        '_setup',     # ssl_setup
+        '_configure', # ctx_configure
+        '_begin',     # hash_begin
+        '_start',     # session_start
+        '_reset',     # state_reset
+        '_clear',     # buffer_clear (when used to initialize)
+    )
+
+    return any(pat in name_lower for pat in initializer_patterns)
+
+
 def _is_getter_or_ref_counter(func: FunctionInfo, target_type_normalized: str) -> bool:
     """
-    Check if a function is likely a getter/ref-counter rather than a true constructor.
+    Check if a function is likely a getter/ref-counter rather than a constructor/initializer.
 
     Signs of a getter/ref-counter:
     - Takes the type as a parameter AND returns the same type
     - Name contains 'get', 'iter', 'peek', 'ref', 'unref'
 
-    Exception: _init functions that take the type are initializers, not getters.
+    Exception: Initializer functions that take the type are NOT getters.
     """
     name_lower = func.name.lower()
+
+    # EXCEPTION: Initializers that take the type are NOT getters
+    # They're functions that populate pre-allocated memory
+    if _is_initializer_pattern(func.name):
+        return False
 
     # Check if name suggests getter/ref behavior
     getter_patterns = ('_get', '_peek', '_iter', '_ref', '_unref', '_put')
     if any(pat in name_lower for pat in getter_patterns):
         return True
 
-    # EXCEPTION: _init functions that take the type are NOT getters
-    # They're initializers that populate pre-allocated memory
-    if '_init' in name_lower:
-        return False
-
     # Check if it takes the target type as input AND returns it (signature of getter)
+    # Note: initializers take the type but return int/void, so they pass through
     if func.params:
+        return_normalized = normalize_type(func.return_type)
         for param in func.params:
             param_normalized = normalize_type(param.type)
             if param_normalized == target_type_normalized:
-                # This function takes the type as input - likely a getter/transformer
-                return True
+                # Only mark as getter if it ALSO returns the same type
+                # Initializers return int/void, so they won't match here
+                if return_normalized == target_type_normalized:
+                    return True
 
     return False
 
@@ -266,7 +294,7 @@ def find_type(conn: sqlite3.Connection, type_name: str) -> Optional[TypeInfo]:
     normalized = normalize_type(type_name)
 
     row = conn.execute("""
-        SELECT name, category, enum_values_json, file_path, source
+        SELECT name, category, enum_values_json, file_path, source, pointer_to
         FROM types
         WHERE name = ? OR name = ?
         LIMIT 1
@@ -278,12 +306,151 @@ def find_type(conn: sqlite3.Connection, type_name: str) -> Optional[TypeInfo]:
 def find_types_by_category(conn: sqlite3.Connection, category: str) -> List[TypeInfo]:
     """Find all types of a given category."""
     rows = conn.execute("""
-        SELECT name, category, enum_values_json, file_path, source
+        SELECT name, category, enum_values_json, file_path, source, pointer_to
         FROM types
         WHERE category = ?
     """, (category,)).fetchall()
 
     return [TypeInfo.from_row(row) for row in rows]
+
+
+def _is_destructor(func_name: str) -> bool:
+    """Check if a function name suggests it's a destructor/cleanup function."""
+    name_lower = func_name.lower()
+    destructor_patterns = (
+        '_free', '_destroy', '_release', '_cleanup', '_close',
+        '_finish', '_final', '_done', '_end', '_deinit',
+    )
+    return any(pat in name_lower for pat in destructor_patterns)
+
+
+def _is_update_function(func_name: str) -> bool:
+    """Check if a function name suggests it's an update/process function (needs initialized state)."""
+    name_lower = func_name.lower()
+    update_patterns = ('_update', '_process', '_step', '_feed', '_write', '_read')
+    return any(pat in name_lower for pat in update_patterns)
+
+
+def _score_initializer(func: FunctionInfo) -> int:
+    """
+    Score an initializer function by how likely it is to be the primary initializer.
+
+    Higher score = more likely to be used first.
+    """
+    name = func.name.lower()
+    score = 0
+
+    # Naming patterns (higher = better for initialization)
+    if '_init' in name and '_deinit' not in name:
+        score += 100  # Best: foo_init
+    elif '_set_' in name and 'key' in name:
+        score += 95   # tc_aes128_set_encrypt_key
+    elif '_set_' in name:
+        score += 80   # General setters
+    elif '_setup' in name:
+        score += 75
+    elif '_configure' in name:
+        score += 70
+    elif '_begin' in name or '_start' in name:
+        score += 60
+    elif '_reset' in name:
+        score += 40   # Reset might be re-initialization
+    elif '_clear' in name:
+        score += 30
+
+    # Prefer functions with fewer required params (easier to call)
+    if len(func.params) <= 2:
+        score += 20
+    elif len(func.params) <= 4:
+        score += 10
+
+    # Bonus for documented functions
+    if func.doc_comment:
+        score += 5
+
+    return score
+
+
+def find_initializers(
+    conn: sqlite3.Connection,
+    type_name: str,
+    target_function_name: str = None,
+) -> List[FunctionInfo]:
+    """
+    Find functions that initialize pre-allocated instances of the given type.
+
+    Unlike factories (which allocate and return T*), initializers:
+    - Take T* as an early parameter (typically first)
+    - Return int (error code) or void
+    - Have names containing: _init, _set_, _setup, _configure, _begin
+
+    Args:
+        conn: Database connection
+        type_name: Type to find initializers for
+        target_function_name: Optional name of target function for semantic filtering
+
+    Returns:
+        List of FunctionInfo sorted by initializer score
+    """
+    normalized = normalize_type(type_name)
+
+    # Strategy 1: Find functions that take this type as a parameter
+    # and have initializer-like names
+    # Search for the type name in params_json
+    type_pattern = f'%{normalized}%'
+
+    rows = conn.execute("""
+        SELECT name, return_type, params_json, file_path, line_number, source, doc_comment
+        FROM functions
+        WHERE params_json LIKE ?
+          AND (return_type IN ('int', 'void') OR return_type LIKE '%error%' OR return_type LIKE '%status%')
+        ORDER BY (doc_comment IS NOT NULL AND doc_comment != '') DESC
+    """, (type_pattern,)).fetchall()
+
+    # Deduplicate and filter
+    seen = set()
+    candidates = []
+
+    for row in rows:
+        func = FunctionInfo.from_row(row)
+
+        if func.name in seen:
+            continue
+        seen.add(func.name)
+
+        # Skip if it's a destructor
+        if _is_destructor(func.name):
+            continue
+
+        # Skip update/process functions (they need initialized state, not create it)
+        if _is_update_function(func.name):
+            continue
+
+        # Skip semantically opposite functions
+        if _is_semantically_opposite(func.name, target_function_name):
+            continue
+
+        # Must have initializer-like name pattern
+        if not _is_initializer_pattern(func.name):
+            continue
+
+        # Verify this function actually takes the type as a parameter
+        has_type_param = False
+        for param in func.params:
+            param_normalized = normalize_type(param.type)
+            if param_normalized == normalized:
+                has_type_param = True
+                break
+
+        if not has_type_param:
+            continue
+
+        candidates.append((func, _score_initializer(func)))
+
+    # Sort by score descending
+    candidates.sort(key=lambda x: x[1], reverse=True)
+
+    return [func for func, _ in candidates]
 
 
 def collect_factories_recursive(
