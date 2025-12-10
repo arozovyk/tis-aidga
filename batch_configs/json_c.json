@@ -1,0 +1,43 @@
+{
+  "project": "json-c",
+  "output_dir": "drivers/json-c",
+  "context_mode": "ast",
+  "functions": {
+    "json_object.c": [
+      "json_object_get_int",
+      "json_object_get_int64",
+      "json_object_get_uint64",
+      "json_object_get_double",
+      "json_object_int_inc",
+      "json_object_array_put_idx",
+      "json_object_array_insert_idx",
+      "json_object_array_del_idx",
+      "json_object_array_add",
+      "json_object_object_add",
+      "json_object_object_add_ex",
+      "json_object_object_get_ex",
+      "json_object_object_del",
+      "json_object_new_string_len",
+      "json_object_set_string_len",
+      "json_object_deep_copy",
+      "json_object_equal",
+      "json_object_to_json_string_ext"
+    ],
+    "json_tokener.c": [
+      "json_tokener_parse",
+      "json_tokener_parse_ex",
+      "json_tokener_new_ex"
+    ],
+    "json_pointer.c": [
+      "json_pointer_get",
+      "json_pointer_set"
+    ],
+    "json_visit.c": [
+      "json_c_visit"
+    ],
+    "json_util.c": [
+      "json_parse_int64",
+      "json_parse_uint64"
+    ]
+  }
+}

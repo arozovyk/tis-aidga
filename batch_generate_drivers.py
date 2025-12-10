@@ -1,10 +1,14 @@
 #!/usr/bin/env python3
 """
-Batch driver generation script for json-c library.
+Batch driver generation script.
 Runs multiple tischiron gen commands in parallel using a worker pool.
+
+Usage:
+  batch_generate_drivers.py --config batch_configs/json_c.json --model claude-haiku-4-5
 """
 
 import argparse
+import json
 import os
 import subprocess
 import sys
@@ -12,10 +16,9 @@ import time
 import logging
 import threading
 from concurrent.futures import ThreadPoolExecutor, as_completed
-from dataclasses import dataclass, field
+from dataclasses import dataclass
 from pathlib import Path
-from typing import Optional
-from queue import Queue
+from typing import Optional, List, Tuple
 
 
 def load_env_file(env_path: Path = None):
@@ -49,40 +52,33 @@ logging.basicConfig(
 )
 logger = logging.getLogger(__name__)
 
-# Functions to generate drivers for, organized by source file
-FUNCTIONS_TO_TEST = [
-    # json_object.c - Core object functions
-    ("json_object.c", "json_object_get_int"),
-    ("json_object.c", "json_object_get_int64"),
-    ("json_object.c", "json_object_get_uint64"),
-    ("json_object.c", "json_object_get_double"),
-    ("json_object.c", "json_object_int_inc"),
-    ("json_object.c", "json_object_array_put_idx"),
-    ("json_object.c", "json_object_array_insert_idx"),
-    ("json_object.c", "json_object_array_del_idx"),
-    ("json_object.c", "json_object_array_add"),
-    ("json_object.c", "json_object_object_add"),
-    ("json_object.c", "json_object_object_add_ex"),
-    ("json_object.c", "json_object_object_get_ex"),
-    ("json_object.c", "json_object_object_del"),
-    ("json_object.c", "json_object_new_string_len"),
-    ("json_object.c", "json_object_set_string_len"),
-    ("json_object.c", "json_object_deep_copy"),
-    ("json_object.c", "json_object_equal"),
-    ("json_object.c", "json_object_to_json_string_ext"),
-    # json_tokener.c - Parsing functions
-    ("json_tokener.c", "json_tokener_parse"),
-    ("json_tokener.c", "json_tokener_parse_ex"),
-    ("json_tokener.c", "json_tokener_new_ex"),
-    # json_pointer.c - JSON Pointer (RFC 6901)
-    ("json_pointer.c", "json_pointer_get"),
-    ("json_pointer.c", "json_pointer_set"),
-    # json_visit.c - Tree traversal
-    ("json_visit.c", "json_c_visit"),
-    # json_util.c - Utilities
-    ("json_util.c", "json_parse_int64"),
-    ("json_util.c", "json_parse_uint64"),
-]
+
+@dataclass
+class BatchConfig:
+    """Configuration for batch driver generation."""
+    project: str
+    output_dir: Path
+    context_mode: str
+    functions: List[Tuple[str, str]]  # [(source_file, function_name), ...]
+
+    @classmethod
+    def from_file(cls, config_path: Path) -> "BatchConfig":
+        """Load configuration from JSON file."""
+        with open(config_path) as f:
+            data = json.load(f)
+
+        # Flatten functions dict to list of tuples
+        functions = []
+        for source_file, func_list in data.get("functions", {}).items():
+            for func_name in func_list:
+                functions.append((source_file, func_name))
+
+        return cls(
+            project=data["project"],
+            output_dir=Path(data.get("output_dir", "drivers/batch")),
+            context_mode=data.get("context_mode", "ast"),
+            functions=functions,
+        )
 
 
 @dataclass
@@ -129,7 +125,7 @@ def generate_driver(
     function_name: str,
     model: str,
     max_iterations: int,
-    output_dir: Path,
+    config: BatchConfig,
     verbose: bool,
     max_retries: int = 3,
 ) -> TaskResult:
@@ -144,15 +140,15 @@ def generate_driver(
         staggered_executor.wait_for_slot()
 
     start_time = time.time()
-    output_file = output_dir / f"{function_name}_driver.c"
+    output_file = config.output_dir / f"{function_name}_driver.c"
 
     cmd = [
         sys.executable, "-m", "tis_driver_agent.cli", "gen",
-        "json-c",
+        config.project,
         source_file,
         function_name,
         "--with-logs",
-        "--context", "ast",
+        "--context", config.context_mode,
         "--output", str(output_file),
         "--model", model,
         "--max-iterations", str(max_iterations),
@@ -164,9 +160,6 @@ def generate_driver(
     cmd_str = " ".join(cmd)
     logger.info(f"[START] {function_name}")
     logger.debug(f"Command: {cmd_str}")
-
-    last_result = None
-    last_error = None
 
     # Ensure environment variables are passed to subprocess
     env = os.environ.copy()
@@ -281,9 +274,9 @@ def generate_driver(
 
 def worker_task(args: tuple) -> TaskResult:
     """Worker function for thread pool."""
-    source_file, function_name, model, max_iterations, output_dir, verbose = args
+    source_file, function_name, model, max_iterations, config, verbose = args
     return generate_driver(
-        source_file, function_name, model, max_iterations, output_dir, verbose
+        source_file, function_name, model, max_iterations, config, verbose
     )
 
 
@@ -437,15 +430,21 @@ def main():
     global staggered_executor
 
     parser = argparse.ArgumentParser(
-        description="Batch generate TIS-Analyzer drivers for json-c functions",
+        description="Batch generate TIS-Analyzer drivers from config file",
         formatter_class=argparse.RawDescriptionHelpFormatter,
         epilog="""
 Examples:
-  %(prog)s --model claude-haiku-4-5
-  %(prog)s --model gpt-4o-mini --workers 5 --max-iterations 5
-  %(prog)s --model claude-sonnet-4 --verbose --dry-run
-  %(prog)s --model claude-haiku-4-5 --stagger 3  # 3 second delay between starts
+  %(prog)s --config batch_configs/json_c.json --model claude-haiku-4-5
+  %(prog)s -c batch_configs/json_c.json -m gpt-4o-mini --workers 5
+  %(prog)s -c batch_configs/json_c.json -m claude-sonnet-4 --dry-run
+  %(prog)s -c batch_configs/json_c.json -m claude-haiku-4-5 --stagger 3
         """,
+    )
+    parser.add_argument(
+        "--config", "-c",
+        type=Path,
+        required=True,
+        help="Path to batch config JSON file (e.g., batch_configs/json_c.json)",
     )
     parser.add_argument(
         "--model", "-m",
@@ -473,8 +472,8 @@ Examples:
     parser.add_argument(
         "--output-dir", "-o",
         type=Path,
-        default=Path("drivers/batch"),
-        help="Output directory for generated drivers (default: drivers/batch)",
+        default=None,
+        help="Override output directory from config",
     )
     parser.add_argument(
         "--verbose", "-v",
@@ -503,29 +502,43 @@ Examples:
     if args.debug or args.verbose:
         logging.getLogger().setLevel(logging.DEBUG)
 
+    # Load config
+    if not args.config.exists():
+        logger.error(f"Config file not found: {args.config}")
+        sys.exit(1)
+
+    config = BatchConfig.from_file(args.config)
+
+    # Override output dir if specified
+    if args.output_dir:
+        config.output_dir = args.output_dir
+
     # Create output directory
-    args.output_dir.mkdir(parents=True, exist_ok=True)
+    config.output_dir.mkdir(parents=True, exist_ok=True)
 
     # Filter functions if specified
-    functions = FUNCTIONS_TO_TEST
+    functions = config.functions
     if args.functions:
         functions = [
-            (sf, fn) for sf, fn in FUNCTIONS_TO_TEST
+            (sf, fn) for sf, fn in config.functions
             if fn in args.functions
         ]
         if not functions:
             logger.error(f"No matching functions found for: {args.functions}")
-            logger.info(f"Available functions: {[fn for _, fn in FUNCTIONS_TO_TEST]}")
+            logger.info(f"Available functions: {[fn for _, fn in config.functions]}")
             sys.exit(1)
 
     print("=" * 80)
     print("TIS-CHIRON BATCH DRIVER GENERATION")
     print("=" * 80)
+    print(f"Config:           {args.config}")
+    print(f"Project:          {config.project}")
     print(f"Model:            {args.model}")
     print(f"Workers:          {args.workers}")
     print(f"Stagger delay:    {args.stagger}s")
     print(f"Max iterations:   {args.max_iterations}")
-    print(f"Output directory: {args.output_dir}")
+    print(f"Output directory: {config.output_dir}")
+    print(f"Context mode:     {config.context_mode}")
     print(f"Functions:        {len(functions)}")
 
     # Check for API keys
@@ -542,10 +555,10 @@ Examples:
     if args.dry_run:
         print("\nDRY RUN - Commands that would be executed:\n")
         for i, (source_file, function_name) in enumerate(functions):
-            output_file = args.output_dir / f"{function_name}_driver.c"
+            output_file = config.output_dir / f"{function_name}_driver.c"
             cmd = (
-                f"tischiron gen json-c {source_file} {function_name} "
-                f"--with-logs --context ast --output {output_file} "
+                f"tischiron gen {config.project} {source_file} {function_name} "
+                f"--with-logs --context {config.context_mode} --output {output_file} "
                 f"--model {args.model} --max-iterations {args.max_iterations}"
             )
             if args.verbose:
@@ -563,7 +576,7 @@ Examples:
 
     # Prepare task arguments
     tasks = [
-        (sf, fn, args.model, args.max_iterations, args.output_dir, args.verbose)
+        (sf, fn, args.model, args.max_iterations, config, args.verbose)
         for sf, fn in functions
     ]
 
@@ -610,7 +623,7 @@ Examples:
     total_duration = time.time() - start_time
 
     # Print statistics
-    print_stats(results, total_duration, args.output_dir)
+    print_stats(results, total_duration, config.output_dir)
 
     # Exit with error code if any failures
     failed_count = sum(1 for r in results if not r.success)
