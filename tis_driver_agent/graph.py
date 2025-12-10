@@ -41,7 +41,12 @@ def create_workflow(
                 "final_driver": state["current_driver_code"],
                 "status": "success",
             }
-        return {**state, "status": "failed"}
+        # Even on failure, keep the last driver code for reference
+        return {
+            **state,
+            "final_driver": state.get("current_driver_code"),
+            "status": "failed",
+        }
 
     # Add nodes
     workflow.add_node("planner", planner_node)

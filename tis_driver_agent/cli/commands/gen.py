@@ -297,6 +297,17 @@ def cmd_gen(args):
                 for err in result["validation_errors"]:
                     for e in err.get("errors", []):
                         print(f"  - {e}")
+            # Save the last driver code with _xxx suffix if available
+            if result.get("final_driver"):
+                base_output = args.output or f"Driver_for_{args.function}.c"
+                # Insert _xxx before .c extension
+                if base_output.endswith(".c"):
+                    failed_output = base_output[:-2] + "_xxx.c"
+                else:
+                    failed_output = base_output + "_xxx"
+                with open(failed_output, "w") as f:
+                    f.write(result["final_driver"])
+                print(f"Last attempt saved to: {failed_output}")
             # Log final result
             if logger:
                 logger.log_final_result(
