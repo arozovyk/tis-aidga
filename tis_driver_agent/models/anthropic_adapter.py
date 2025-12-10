@@ -19,11 +19,19 @@ class AnthropicAdapter:
         self.temperature = temperature
         self.client = Anthropic(api_key=api_key)
 
+    def _get_max_tokens(self) -> int:
+        """Get max tokens based on model."""
+        # Claude 3 Haiku has a 4096 token output limit
+        if "claude-3-haiku" in self.model.lower():
+            return 4096
+        # All other Claude models support 8192
+        return 8192
+
     def invoke(self, prompt: str, system_prompt: str = None) -> str:
         """Send prompt to model and get response."""
         kwargs = {
             "model": self.model,
-            "max_tokens": 8192,
+            "max_tokens": self._get_max_tokens(),
             "messages": [{"role": "user", "content": prompt}],
             "temperature": self.temperature,
         }
