@@ -14,6 +14,32 @@ from .lookup import (
 from .parser import normalize_type, categorize_type
 
 
+def add_struct_keyword_to_signature(sig: str, opaque_types: Set[str]) -> str:
+    """
+    Ensure opaque type names in a signature use the 'struct' keyword.
+
+    In C, when using forward-declared types (e.g., `struct json_object;`),
+    you must use `struct json_object *` not just `json_object *`.
+    This function transforms signatures to use the correct form.
+
+    Args:
+        sig: Function signature string
+        opaque_types: Set of type names that are forward-declared as opaque structs
+
+    Returns:
+        Signature with struct keywords added where needed
+    """
+    result = sig
+    for opaque_type in opaque_types:
+        # Match the type name followed by optional whitespace and *
+        # but not already preceded by 'struct '
+        # Use word boundary to avoid partial matches
+        pattern = rf'(?<!\bstruct\s)(?<!\bstruct)\b({re.escape(opaque_type)})\s*\*'
+        replacement = rf'struct \1 *'
+        result = re.sub(pattern, replacement, result)
+    return result
+
+
 def extract_type_identifiers(signatures: List[str]) -> Set[str]:
     """
     Extract all type identifiers from function signatures.
@@ -287,6 +313,7 @@ def format_context(
             lines.append("")
 
         # Collect all signatures (only from relevant factories)
+        # Ensure signatures use 'struct' keyword for opaque types
         signatures = []
         for type_name, funcs in relevant_factories.items():
             for func in funcs[:5]:  # Top 5 per type
@@ -295,6 +322,8 @@ def format_context(
                     sig += ';'
                 if 'static ' in sig:
                     continue
+                # Add struct keyword for opaque types to ensure correct C syntax
+                sig = add_struct_keyword_to_signature(sig, types_to_declare)
                 if not sig.startswith('extern'):
                     sig = 'extern ' + sig
                 signatures.append(sig)
