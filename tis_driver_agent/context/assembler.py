@@ -106,12 +106,16 @@ def assemble_context(
             if category == 'struct_ptr':
                 param_types.append(param.type)
 
-        # 3. Collect factories for each type (with transitive deps)
+        # 3. Collect factories for each type (with semantic filtering)
         factories: Dict[str, List[FunctionInfo]] = {}
         visited = set()
 
         for ptype in param_types:
-            collect_factories_recursive(conn, ptype, factories, visited, 0, max_depth)
+            collect_factories_recursive(
+                conn, ptype, factories, visited,
+                depth=0, max_depth=1,
+                target_function_name=function_name,
+            )
 
         # 4. Get type definitions
         type_defs: Dict[str, TypeInfo] = {}
@@ -121,9 +125,9 @@ def assemble_context(
                 if type_info:
                     type_defs[normalize_type(ptype)] = type_info
 
-            # Also get enum types used in factories
+            # Also get enum types used in top factories (limit to top 3 per type)
             for _, funcs in factories.items():
-                for func in funcs:
+                for func in funcs[:3]:  # Only top 3 to avoid noise from low-ranked factories
                     for param in func.params:
                         if categorize_type(param.type) == 'enum':
                             enum_info = find_type(conn, param.type)
@@ -142,8 +146,9 @@ def assemble_context(
         required_type_names = extract_type_identifiers(factory_signatures)
         required_type_defs = resolve_type_definitions(conn, required_type_names)
 
-        # 6. Format context
-        return format_context(target, factories, type_defs, required_type_defs)
+        # 6. Format context (pass target param types for forward declarations)
+        target_param_types = set(normalize_type(pt) for pt in param_types)
+        return format_context(target, factories, type_defs, required_type_defs, target_param_types)
 
     finally:
         conn.close()
@@ -154,9 +159,18 @@ def format_context(
     factories: Dict[str, List[FunctionInfo]],
     type_defs: Dict[str, TypeInfo],
     required_type_defs: Optional[Dict[str, str]] = None,
+    target_param_types: Optional[Set[str]] = None,
 ) -> str:
     """
     Format collected context as markdown for LLM prompt.
+
+    Args:
+        target: Target function info
+        factories: Dict of type_name -> list of factory functions
+        type_defs: Dict of type definitions
+        required_type_defs: Dict of required type definitions from factory signatures
+        target_param_types: Set of normalized type names that the target function needs
+                           (only these get forward declarations)
 
     Includes doc comments when available.
     """
@@ -199,15 +213,20 @@ def format_context(
         lines.append("```")
         lines.append("")
 
-    # Object creation API
-    if factories:
+    # Object creation API - only show factories for types the target function needs
+    relevant_factories = {
+        k: v for k, v in factories.items()
+        if not target_param_types or k in target_param_types
+    }
+
+    if relevant_factories:
         lines.append("### Object Creation API")
         lines.append("")
         lines.append("**CRITICAL: Use these constructor functions to create objects.**")
         lines.append("**DO NOT use `tis_alloc()`, `malloc()`, or manual struct allocation for these types.**")
         lines.append("")
 
-        for type_name, funcs in factories.items():
+        for type_name, funcs in relevant_factories.items():
             # Limit to top 10 most relevant factories per type
             top_funcs = funcs[:10]
 
@@ -249,7 +268,10 @@ def format_context(
         lines.append("")
         lines.append("```c")
         lines.append("// Forward declare opaque types (DO NOT define the struct contents)")
-        for type_name in factories.keys():
+        # Only forward-declare types that the target function actually needs,
+        # not types that appear as factory parameters (e.g., json_tokener)
+        types_to_declare = target_param_types if target_param_types else set(factories.keys())
+        for type_name in types_to_declare:
             lines.append(f"struct {type_name};")
         lines.append("")
 
@@ -264,9 +286,9 @@ def format_context(
                 lines.append(source)
             lines.append("")
 
-        # Collect all signatures
+        # Collect all signatures (only from relevant factories)
         signatures = []
-        for type_name, funcs in factories.items():
+        for type_name, funcs in relevant_factories.items():
             for func in funcs[:5]:  # Top 5 per type
                 sig = func.source.split('{')[0].strip() if '{' in func.source else func.source.strip()
                 if not sig.endswith(';'):
@@ -348,7 +370,11 @@ def get_context_summary(index_path: str, function_name: str) -> Optional[Dict]:
 
         for param in target.params:
             if categorize_type(param.type) == 'struct_ptr':
-                collect_factories_recursive(conn, param.type, factories, visited, 0, 2)
+                collect_factories_recursive(
+                    conn, param.type, factories, visited,
+                    depth=0, max_depth=1,
+                    target_function_name=function_name,
+                )
 
         return {
             "function": target.name,

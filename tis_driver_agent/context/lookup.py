@@ -73,12 +73,20 @@ def _is_getter_or_ref_counter(func: FunctionInfo, target_type_normalized: str) -
     Signs of a getter/ref-counter:
     - Takes the type as a parameter AND returns the same type
     - Name contains 'get', 'iter', 'peek', 'ref', 'unref'
+
+    Exception: _init functions that take the type are initializers, not getters.
     """
+    name_lower = func.name.lower()
+
     # Check if name suggests getter/ref behavior
     getter_patterns = ('_get', '_peek', '_iter', '_ref', '_unref', '_put')
-    name_lower = func.name.lower()
     if any(pat in name_lower for pat in getter_patterns):
         return True
+
+    # EXCEPTION: _init functions that take the type are NOT getters
+    # They're initializers that populate pre-allocated memory
+    if '_init' in name_lower:
+        return False
 
     # Check if it takes the target type as input AND returns it (signature of getter)
     if func.params:
@@ -127,16 +135,68 @@ def _score_factory(func: FunctionInfo) -> int:
     return score
 
 
-def find_factories(conn: sqlite3.Connection, type_name: str) -> List[FunctionInfo]:
+def _is_semantically_opposite(factory_name: str, target_name: str) -> bool:
+    """
+    Check if a factory function is semantically opposite to the target function.
+
+    For example:
+    - Target is *_to_string* (serialization) → exclude *_parse* (deserialization)
+    - Target is *_get_* (getter) → exclude *_set_* (setter)
+    - Target is *_read* → exclude *_write*
+    - Target is *_encode* → exclude *_decode*
+    """
+    if not target_name:
+        return False
+
+    factory_lower = factory_name.lower()
+    target_lower = target_name.lower()
+
+    # Define opposite pairs: (target_pattern, factory_pattern_to_exclude)
+    opposite_pairs = [
+        # Serialization vs deserialization
+        ('_to_string', '_parse'),
+        ('_to_json', '_parse'),
+        ('_serialize', '_parse'),
+        ('_serialize', '_deserialize'),
+        ('_encode', '_decode'),
+        ('_stringify', '_parse'),
+        # Getters vs setters (for factories, we usually want constructors not setters)
+        ('_get_', '_set_'),
+        # Read vs write
+        ('_read', '_write'),
+        ('_load', '_save'),
+        # Pack vs unpack
+        ('_pack', '_unpack'),
+    ]
+
+    for target_pattern, factory_pattern in opposite_pairs:
+        if target_pattern in target_lower and factory_pattern in factory_lower:
+            return True
+
+    return False
+
+
+def find_factories(
+    conn: sqlite3.Connection,
+    type_name: str,
+    target_function_name: str = None,
+) -> List[FunctionInfo]:
     """
     Find functions that can create instances of the given type.
+
+    Args:
+        conn: Database connection
+        type_name: Type to find factories for
+        target_function_name: Optional name of target function for semantic filtering
 
     Searches by:
     1. Return type match (normalized)
     2. Naming conventions: *_new*, *_create*, *_from_*, *_parse*
+    3. Output parameter pattern: functions with T** param (error-code + output)
 
     Filters out:
     - Getter/ref-counter functions (take and return same type)
+    - Semantically opposite factories (e.g., *_parse* when target is *_to_string*)
 
     When the same function exists in both header and source,
     prefers the one with documentation.
@@ -165,20 +225,35 @@ def find_factories(conn: sqlite3.Connection, type_name: str) -> List[FunctionInf
         ORDER BY (doc_comment IS NOT NULL AND doc_comment != '') DESC
     """, (normalized, normalized, normalized, normalized, normalized, normalized, normalized)).fetchall()
 
+    # Find functions with T** output parameter (error-code pattern)
+    # e.g., int foo_create(foo_t **out) returns error code, writes to output param
+    double_ptr_pattern = f'%{normalized}%**%'
+    output_param_rows = conn.execute("""
+        SELECT name, return_type, params_json, file_path, line_number, source, doc_comment
+        FROM functions
+        WHERE params_json LIKE ?
+          AND (return_type IN ('int', 'void') OR return_type LIKE '%error%' OR return_type LIKE '%status%')
+          AND (name LIKE '%_create%' OR name LIKE '%_new%' OR name LIKE '%_init%' OR name LIKE '%_alloc%' OR name LIKE '%_open%')
+        ORDER BY (doc_comment IS NOT NULL AND doc_comment != '') DESC
+    """, (double_ptr_pattern,)).fetchall()
+
     # Deduplicate by name - keep first occurrence (which has doc_comment if available)
     seen = set()
     candidates = []
-    for row in rows + pattern_rows:
+    for row in rows + pattern_rows + output_param_rows:
         func = FunctionInfo.from_row(row)
         if func.name not in seen:
             seen.add(func.name)
             candidates.append(func)
 
-    # Filter out getters/ref-counters and score remaining
+    # Filter out getters/ref-counters, semantically opposite, and score remaining
     results = []
     for func in candidates:
-        if not _is_getter_or_ref_counter(func, normalized):
-            results.append((func, _score_factory(func)))
+        if _is_getter_or_ref_counter(func, normalized):
+            continue
+        if _is_semantically_opposite(func.name, target_function_name):
+            continue
+        results.append((func, _score_factory(func)))
 
     # Sort by score descending
     results.sort(key=lambda x: x[1], reverse=True)
@@ -217,7 +292,8 @@ def collect_factories_recursive(
     factories: dict,
     visited: Set[str],
     depth: int = 0,
-    max_depth: int = 2,
+    max_depth: int = 1,
+    target_function_name: str = None,
 ) -> None:
     """
     Recursively collect factory functions for a type and its dependencies.
@@ -229,6 +305,7 @@ def collect_factories_recursive(
         visited: Set of already-visited types
         depth: Current recursion depth
         max_depth: Maximum recursion depth
+        target_function_name: Name of target function for semantic filtering
     """
     normalized = normalize_type(type_name)
 
@@ -237,7 +314,7 @@ def collect_factories_recursive(
 
     visited.add(normalized)
 
-    type_factories = find_factories(conn, type_name)
+    type_factories = find_factories(conn, type_name, target_function_name)
     if type_factories:
         factories[normalized] = type_factories
 
@@ -253,6 +330,7 @@ def collect_factories_recursive(
                         visited,
                         depth + 1,
                         max_depth,
+                        target_function_name,
                     )
 
 
